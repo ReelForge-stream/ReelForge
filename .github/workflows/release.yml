@@ -6,7 +6,8 @@ name: Release
 # Either way you get:
 #   1. ReelForge_0.2.0.0.zip  - the module; servers auto-update from the feed below
 #   2. ReelForge-Setup-0.2.0.exe - the all-in-one Windows installer
-#   3. the update feed (branch "update-feed", manifest.json)
+#   3. ReelForge-AndroidTV-0.2.0.apk - the Google TV / Android TV app (sideload; it updates itself)
+#   4. the update feed (branch "update-feed", manifest.json)
 on:
   push:
     tags: ['v*']
@@ -102,6 +103,44 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           files: packaging/windows/dist/ReelForge-Setup-${{ needs.module.outputs.version }}.exe
+
+  android-tv:
+    # Signed with the same key every release (repo secrets), so the TV app can update in place.
+    needs: module
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tv/android
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.RF_ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Repo secret RF_ANDROID_KEYSTORE_B64 is missing. See tv/android/README.md (Signing)."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/reelforge.keystore"
+          echo "RF_KEYSTORE_PATH=$RUNNER_TEMP/reelforge.keystore" >> "$GITHUB_ENV"
+      - name: Build the app
+        env:
+          RELEASE_VERSION: ${{ needs.module.outputs.version }}
+          RF_KEYSTORE_PASSWORD: ${{ secrets.RF_ANDROID_KEYSTORE_PASSWORD }}
+          RF_KEY_ALIAS: ${{ secrets.RF_ANDROID_KEY_ALIAS }}
+          RF_KEY_PASSWORD: ${{ secrets.RF_ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon testDebugUnitTest assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "ReelForge-AndroidTV-${RELEASE_VERSION}.apk"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: tv/android/ReelForge-AndroidTV-${{ needs.module.outputs.version }}.apk
 
   update-feed:
     # Publish to the feed only after both downloads exist.

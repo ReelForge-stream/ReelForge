@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ReelForge" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/base</item>
+        <item name="android:colorBackground">@color/base</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>
