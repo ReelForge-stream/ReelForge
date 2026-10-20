@@ -173,6 +173,49 @@ export class Api {
     return this.get<{ Items: Item[]; TotalRecordCount: number }>(`/Items?${q}`);
   }
 
+  /** Every movie and show in one light list, for instant typo-tolerant search as you type. */
+  titleIndex() {
+    const q = new URLSearchParams({
+      userId: this.userId,
+      recursive: 'true',
+      includeItemTypes: 'Movie,Series',
+      fields: 'SortName,OriginalTitle,ProductionYear,CommunityRating,DateCreated',
+      enableImageTypes: 'Primary,Thumb,Backdrop',
+      imageTypeLimit: '1',
+      sortBy: 'SortName',
+      limit: '50000',
+    });
+    return this.get<{ Items: Item[] }>(`/Items?${q}`).then((r) => r.Items);
+  }
+
+  /** Just the sort names of a library view, in order: enough to build the A–Z bar. */
+  sortIndex(o: { parentId: string; types: string; genre?: string }) {
+    const q = new URLSearchParams({
+      userId: this.userId,
+      parentId: o.parentId,
+      recursive: 'true',
+      includeItemTypes: o.types,
+      sortBy: 'SortName',
+      sortOrder: 'Ascending',
+      fields: 'SortName',
+      enableImages: 'false',
+      enableUserData: 'false',
+      limit: '50000',
+    });
+    if (o.genre) q.set('genres', o.genre);
+    return this.get<{ Items: { Id: string; Name: string; SortName?: string }[] }>(`/Items?${q}`).then((r) => r.Items);
+  }
+
+  people(search: string, limit = 4) {
+    return this.get<{ Items: Item[] }>(`/Persons?userId=${this.userId}&searchTerm=${encodeURIComponent(search)}&limit=${limit}&enableImageTypes=Primary`).then((r) => r.Items);
+  }
+
+  byPerson(personId: string) {
+    return this.get<{ Items: Item[] }>(
+      `/Items?userId=${this.userId}&recursive=true&personIds=${personId}&includeItemTypes=Movie,Series&sortBy=ProductionYear,SortName&sortOrder=Descending&fields=${Api.fields}&limit=200`,
+    ).then((r) => r.Items);
+  }
+
   item(id: string) {
     return this.get<Item>(`/Items/${id}?userId=${this.userId}&fields=${Api.fields},People,MediaSources,MediaStreams,Studios,Taglines`);
   }

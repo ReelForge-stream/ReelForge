@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { MatchResult } from './api';
 import { publishItem } from './itemMenu';
+import { forgetTitleIndex } from './search';
 import type { Item } from './types';
 import { Icon, useApi, useToast } from './ui';
 
@@ -87,6 +88,7 @@ function EditInfoForm({ item, onClose }: { item: Item; onClose: () => void }) {
       // Lock what was changed so "Refresh info" doesn't put the old values back.
       const lock = [...(name.trim() !== item.Name ? ['Name'] : []), ...(overview !== (item.Overview ?? '') ? ['Overview'] : [])];
       await api.meta.update(item.Id, patch, lock);
+      forgetTitleIndex();
       publishItem(await api.item(item.Id));
       toast('Info saved');
       onClose();
@@ -225,6 +227,7 @@ function FixMatchForm({ item, onClose }: { item: Item; onClose: () => void }) {
     setApplying(i);
     try {
       await api.meta.apply(item.Id, r, newArt);
+      forgetTitleIndex();
       toast(`Matched to ${r.Name}${r.ProductionYear ? ` (${r.ProductionYear})` : ''}. Updating info and artwork…`);
       onClose();
       // The server downloads the new info in the background; refresh the tiles as it lands.

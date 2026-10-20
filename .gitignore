@@ -12,3 +12,4 @@ packaging/windows/dist/
 *.user
 .DS_Store
 Thumbs.db
+web/.test/

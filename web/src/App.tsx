@@ -12,6 +12,7 @@ import Library from './pages/Library';
 import MyList from './pages/MyList';
 import Details from './pages/Details';
 import { ItemMenuHost } from './lib/itemMenu';
+import SearchBox from './lib/SearchBox';
 import Search from './pages/Search';
 import ManagerLayout from './manager/ManagerLayout';
 import ManagerOverview from './manager/Overview';
@@ -172,9 +173,7 @@ function Shell({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
           </nav>
         </div>
         <div className="topbar-right">
-          <Link to="/search" className="icon-btn" aria-label="Search">
-            <Icon.search />
-          </Link>
+          <SearchBox />
           <ProfileMenu onSignOut={onSignOut} />
         </div>
       </header>

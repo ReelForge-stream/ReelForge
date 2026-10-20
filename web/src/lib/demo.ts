@@ -285,6 +285,10 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   if (p === '/ReelForge/Network/Locations') return { Shares: [], Mapped: [{ Letter: 'Z:', Path: '\\\\10.0.0.201\\plexdata', Reachable: false }] };
   if (p === '/ReelForge/Network/Connect') return { Path: '\\\\10.0.0.201\\plexdata' };
   if (p === '/ReelForge/Network/Shares') return { Shares: ['backups', 'photos', 'plexdata'] };
+  if (p === '/Persons') {
+    const t = (q.get('searchTerm') ?? '').toLowerCase();
+    return { Items: people.filter((x) => x.Name.toLowerCase().includes(t)).map((x, i) => ({ Id: `p${i}`, Name: x.Name, Type: 'Person' })) };
+  }
   if (p === '/Users/Public') return profiles;
   if (p === '/UserViews') return { Items: views };
   if (p === '/Genres') {
@@ -319,11 +323,14 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     if (types?.includes('Movie') && types.includes('Series') && !q.get('parentId')) list = all;
     if (q.get('genres')) list = list.filter((x) => x.Genres?.includes(q.get('genres')!));
     if (q.get('filters') === 'IsFavorite') list = all.filter((x) => favorites.has(x.Id));
+    if (q.get('personIds')) list = movies.slice(0, 5);
     if (q.get('sortBy') === 'CommunityRating,SortName') list = list.slice().sort((a, b) => (b.CommunityRating ?? 0) - (a.CommunityRating ?? 0));
     if (q.get('sortBy') === 'SortName') list = list.slice().sort((a, b) => a.Name.localeCompare(b.Name));
     if (q.get('sortBy') === 'DateCreated,SortName') list = list.slice().reverse();
     if (q.get('sortBy') === 'ProductionYear,SortName') list = list.slice().sort((a, b) => (b.ProductionYear ?? 0) - (a.ProductionYear ?? 0));
-    return { Items: list.map(withUser), TotalRecordCount: list.length };
+    const from = Number(q.get('startIndex') ?? 0);
+    const lim = Number(q.get('limit') ?? list.length);
+    return { Items: list.slice(from, from + lim).map(withUser), TotalRecordCount: list.length };
   }
   if (p.startsWith('/Shows/') && p.endsWith('/Seasons')) {
     const id = p.split('/')[2];
