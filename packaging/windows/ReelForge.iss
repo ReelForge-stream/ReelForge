@@ -67,7 +67,7 @@ Filename: "{commondesktop}\ReelForge.url"; Section: "InternetShortcut"; Key: "Ic
 
 [Tasks]
 Name: "desktopicon"; Description: "Put a ReelForge shortcut on the desktop"
-Name: "firewall"; Description: "Allow other devices on your network to connect (opens port 8096)"
+Name: "firewall"; Description: "Allow other devices on your network and VPN to connect (opens port 8096 to your local network only)"
 
 [UninstallDelete]
 Type: files; Name: "{group}\ReelForge.url"
@@ -77,7 +77,7 @@ Type: files; Name: "{commondesktop}\ReelForge.url"
 [Run]
 Filename: "{app}\ReelForgeService.exe"; Parameters: "install"; Flags: runhidden waituntilterminated; StatusMsg: "Registering the ReelForge service..."
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""ReelForge Media Server"""; Flags: runhidden waituntilterminated; Tasks: firewall
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""ReelForge Media Server"" dir=in action=allow protocol=TCP localport=8096 profile=private,domain"; Flags: runhidden waituntilterminated; Tasks: firewall
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""ReelForge Media Server"" dir=in action=allow protocol=TCP localport=8096 profile=any remoteip=localsubnet,100.64.0.0/10"; Flags: runhidden waituntilterminated; Tasks: firewall
 Filename: "{app}\ReelForgeService.exe"; Parameters: "start"; Flags: runhidden waituntilterminated; StatusMsg: "Starting ReelForge..."
 Filename: "http://localhost:8096/"; Description: "Open ReelForge to finish setup"; Flags: postinstall shellexec nowait skipifsilent; Check: IsFirstInstall
 
