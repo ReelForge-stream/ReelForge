@@ -1,5 +1,6 @@
-// First-run setup calls. These work without signing in, but only until setup is finished.
-import { defaultServer, isDemo } from './api';
+// First-run setup calls (no sign-in needed until setup is finished). Server settings reuses the folder
+// and NAS calls with the administrator's sign-in.
+import { defaultServer, isDemo, loadSession } from './api';
 import { demo } from './demo';
 
 export interface PublicInfo {
@@ -14,15 +15,19 @@ export interface FsEntry {
   Type: string;
 }
 
-const H = {
-  Authorization: 'MediaBrowser Client="ReelForge", Device="Browser", DeviceId="reelforge-setup", Version="0.2.0"',
-};
+// During first-run setup there's no account yet; afterwards (Server settings) the admin's sign-in is sent.
+function headers(): Record<string, string> {
+  const token = loadSession()?.token;
+  return {
+    Authorization: `MediaBrowser Client="ReelForge", Device="Browser", DeviceId="reelforge-setup", Version="0.3.0"${token ? `, Token="${token}"` : ''}`,
+  };
+}
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   if (isDemo) return demo.handle(method, path, body) as Promise<T>;
   const res = await fetch(`${defaultServer()}${path}`, {
     method,
-    headers: { ...H, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { ...headers(), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {

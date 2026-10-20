@@ -19,6 +19,13 @@ import SpaceSaver from './manager/SpaceSaver';
 import Queue from './manager/Queue';
 import Holding from './manager/Holding';
 import ManagerSettings from './manager/Settings';
+import SettingsLayout from './settings/SettingsLayout';
+import SettingsGeneral from './settings/General';
+import SettingsLibraries from './settings/Libraries';
+import SettingsProfiles from './settings/Profiles';
+import SettingsPlayback from './settings/Playback';
+import SettingsNetwork from './settings/Network';
+import SettingsActivity from './settings/Activity';
 
 // The player pulls in hls.js; load it only when someone presses Play.
 const Player = lazy(() => import('./pages/Player'));
@@ -103,7 +110,17 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
               <Route path="space" element={<SpaceSaver />} />
               <Route path="queue" element={<Queue />} />
               <Route path="holding" element={<Holding />} />
-              <Route path="settings" element={<ManagerSettings />} />
+              <Route path="server" element={<ManagerSettings />} />
+            </Route>
+          )}
+          {api.isAdmin && (
+            <Route path="server" element={<SettingsLayout />}>
+              <Route index element={<SettingsGeneral />} />
+              <Route path="libraries" element={<SettingsLibraries />} />
+              <Route path="profiles" element={<SettingsProfiles />} />
+              <Route path="playback" element={<SettingsPlayback />} />
+              <Route path="network" element={<SettingsNetwork />} />
+              <Route path="activity" element={<SettingsActivity />} />
             </Route>
           )}
           <Route path="setup" element={<Navigate to="/" replace />} />
@@ -242,14 +259,14 @@ function ProfileMenu({ onSignOut }: { onSignOut: (switchTo?: string) => void }) 
                   <span className="pm-icon"><Icon.manager /></span>
                   <span>Media Manager</span>
                 </button>
-                <a role="menuitem" className="pm-row" href="/web/#/dashboard/users">
+                <button role="menuitem" className="pm-row" onClick={() => go('/server/profiles')}>
                   <span className="pm-icon"><Icon.pencil /></span>
                   <span>Manage profiles</span>
-                </a>
-                <a role="menuitem" className="pm-row" href="/web/#/dashboard">
+                </button>
+                <button role="menuitem" className="pm-row" onClick={() => go('/server')}>
                   <span className="pm-icon"><Icon.settings /></span>
                   <span>Server settings</span>
-                </a>
+                </button>
               </>
             )}
           </div>

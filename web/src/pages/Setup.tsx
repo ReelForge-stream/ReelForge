@@ -209,33 +209,7 @@ export default function Setup({ onDone }: { onDone: (s: Session) => void }) {
 }
 
 function LibraryEditor({ lib, onChange, onRemove }: { lib: Lib; onChange: (l: Lib) => void; onRemove: () => void }) {
-  const [path, setPath] = useState('');
-  const [err, setErr] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [browsing, setBrowsing] = useState(false);
-  const [signIn, setSignIn] = useState<string | null>(null); // network path waiting for a NAS sign-in
   const kind = KINDS.find((k) => k.kind === lib.kind)!;
-
-  const clean = (p: string) => p.trim().replace(/[\\/]+$/, '') || p.trim();
-
-  async function add(p: string) {
-    const c = clean(p);
-    if (!c) return;
-    setErr(null);
-    setChecking(true);
-    try {
-      await setup.validate(c);
-      if (!lib.paths.includes(c)) onChange({ ...lib, paths: [...lib.paths, c] });
-      setPath('');
-      setSignIn(null);
-    } catch {
-      if (c.startsWith('\\\\') || c.startsWith('//')) setSignIn(c);
-      else setErr('The server can’t find that folder. Check the path and try again.');
-    } finally {
-      setChecking(false);
-    }
-  }
-
   return (
     <section className="lib-editor">
       <div className="lib-head">
@@ -248,6 +222,56 @@ function LibraryEditor({ lib, onChange, onRemove }: { lib: Lib; onChange: (l: Li
           <button type="button" className="btn ghost sm" onClick={() => onChange({ ...lib, paths: lib.paths.filter((x) => x !== p) })}>Remove</button>
         </div>
       ))}
+      <PathAdder
+        placeholder={kind.example}
+        label={`Folder for ${lib.name}`}
+        onAdd={(c) => {
+          if (!lib.paths.includes(c)) onChange({ ...lib, paths: [...lib.paths, c] });
+        }}
+      />
+    </section>
+  );
+}
+
+/**
+ * Type a folder or press Browse; checks the server can see it, and asks for the NAS sign-in when a
+ * network share needs one. Shared by first-run setup and Server settings → Libraries.
+ */
+export function PathAdder({ placeholder, label, onAdd, addLabel = 'Add' }: { placeholder: string; label: string; onAdd: (path: string) => void | Promise<void>; addLabel?: string }) {
+  const [path, setPath] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const [signIn, setSignIn] = useState<string | null>(null); // network path waiting for a NAS sign-in
+
+  const clean = (p: string) => p.trim().replace(/[\\/]+$/, '') || p.trim();
+
+  async function add(p: string) {
+    const c = clean(p);
+    if (!c) return;
+    setErr(null);
+    setChecking(true);
+    try {
+      await setup.validate(c);
+    } catch {
+      setChecking(false);
+      if (c.startsWith('\\\\') || c.startsWith('//')) setSignIn(c);
+      else setErr('The server can’t find that folder. Check the path and try again.');
+      return;
+    }
+    try {
+      await onAdd(c);
+      setPath('');
+      setSignIn(null);
+    } catch (x) {
+      setErr((x as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <>
       <form
         className="lib-add"
         onSubmit={(e) => {
@@ -255,18 +279,12 @@ function LibraryEditor({ lib, onChange, onRemove }: { lib: Lib; onChange: (l: Li
           add(path);
         }}
       >
-        <input className="input" placeholder={kind.example} aria-label={`Folder for ${lib.name}`} value={path} onChange={(e) => setPath(e.target.value)} />
+        <input className="input" placeholder={placeholder} aria-label={label} value={path} onChange={(e) => setPath(e.target.value)} />
         <button type="button" className="btn" onClick={() => setBrowsing(true)}>Browse</button>
-        <button className="btn" disabled={!path.trim() || checking}>{checking ? 'Checking…' : 'Add'}</button>
+        <button className="btn" disabled={!path.trim() || checking}>{checking ? 'Checking…' : addLabel}</button>
       </form>
       {err && <p className="error small">{err}</p>}
-      {signIn && (
-        <NasSignIn
-          path={signIn}
-          onConnected={() => add(signIn)}
-          onCancel={() => setSignIn(null)}
-        />
-      )}
+      {signIn && <NasSignIn path={signIn} onConnected={() => add(signIn)} onCancel={() => setSignIn(null)} />}
       {browsing && (
         <FolderPicker
           onPick={(p) => {
@@ -276,12 +294,12 @@ function LibraryEditor({ lib, onChange, onRemove }: { lib: Lib; onChange: (l: Li
           onCancel={() => setBrowsing(false)}
         />
       )}
-    </section>
+    </>
   );
 }
 
 /** Asks for the NAS username and password, then has the server sign in to the share. */
-function NasSignIn({ path, onConnected, onCancel, compact }: { path: string; onConnected: (root: string) => void; onCancel?: () => void; compact?: boolean }) {
+export function NasSignIn({ path, onConnected, onCancel, compact }: { path: string; onConnected: (root: string) => void; onCancel?: () => void; compact?: boolean }) {
   const [user, setUser] = useState('');
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
@@ -321,7 +339,7 @@ function NasSignIn({ path, onConnected, onCancel, compact }: { path: string; onC
 
 type NetLoc = { label: string; path: string; ok: boolean };
 
-function FolderPicker({ onPick, onCancel }: { onPick: (path: string) => void; onCancel: () => void }) {
+export function FolderPicker({ onPick, onCancel }: { onPick: (path: string) => void; onCancel: () => void }) {
   const [cwd, setCwd] = useState<string | null>(null);
   const [entries, setEntries] = useState<FsEntry[]>([]);
   const [net, setNet] = useState<NetLoc[]>([]);

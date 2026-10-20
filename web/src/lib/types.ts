@@ -19,6 +19,17 @@ export interface MediaStream {
   DeliveryMethod?: string;
   DeliveryUrl?: string;
   Height?: number;
+  Width?: number;
+  BitRate?: number;
+  Channels?: number;
+  ChannelLayout?: string;
+  Title?: string;
+  IsForced?: boolean;
+  IsTextSubtitleStream?: boolean;
+  RealFrameRate?: number;
+  VideoRange?: string;
+  VideoRangeType?: string;
+  Profile?: string;
 }
 
 export interface MediaSource {
@@ -200,4 +211,105 @@ export interface Settings {
   WindowStartHour: number;
   WindowEndHour: number;
   MaxConcurrentJobs: number;
+}
+
+// ---------- server administration ----------
+
+export interface UserPolicy {
+  IsAdministrator: boolean;
+  IsHidden: boolean;
+  IsDisabled: boolean;
+  EnableRemoteAccess: boolean;
+  EnableAllFolders: boolean;
+  EnabledFolders: string[];
+  EnableContentDeletion: boolean;
+  EnableContentDownloading: boolean;
+  EnableVideoPlaybackTranscoding: boolean;
+  RemoteClientBitrateLimit: number;
+  MaxParentalRating?: number | null;
+  MaxParentalSubRating?: number | null;
+  BlockUnratedItems?: string[];
+  [k: string]: unknown;
+}
+
+export interface AdminUser {
+  Id: string;
+  Name: string;
+  HasPassword: boolean;
+  PrimaryImageTag?: string;
+  LastActivityDate?: string;
+  LastLoginDate?: string;
+  Policy: UserPolicy;
+  Configuration?: Record<string, unknown>;
+}
+
+export interface VirtualFolder {
+  Name: string;
+  ItemId: string;
+  CollectionType?: string;
+  Locations: string[];
+  RefreshStatus?: string;
+  RefreshProgress?: number;
+  LibraryOptions?: Record<string, unknown>;
+}
+
+export interface ScheduledTask {
+  Id: string;
+  Key: string;
+  Name: string;
+  Description?: string;
+  Category: string;
+  State: 'Idle' | 'Running' | 'Cancelling';
+  CurrentProgressPercentage?: number;
+  IsHidden?: boolean;
+  LastExecutionResult?: { StartTimeUtc: string; EndTimeUtc: string; Status: string; ErrorMessage?: string };
+}
+
+export interface ActiveSession {
+  Id: string;
+  UserName?: string;
+  UserId?: string;
+  Client: string;
+  DeviceName: string;
+  DeviceId?: string;
+  RemoteEndPoint?: string;
+  LastActivityDate?: string;
+  NowPlayingItem?: Item;
+  PlayState?: { PositionTicks?: number; IsPaused?: boolean; PlayMethod?: string };
+  TranscodingInfo?: TranscodingInfo;
+}
+
+export interface TranscodingInfo {
+  VideoCodec?: string;
+  AudioCodec?: string;
+  Container?: string;
+  IsVideoDirect?: boolean;
+  IsAudioDirect?: boolean;
+  Bitrate?: number;
+  Framerate?: number;
+  Width?: number;
+  Height?: number;
+  AudioChannels?: number;
+  HardwareAccelerationType?: string;
+  CompletionPercentage?: number;
+  TranscodeReasons?: string[];
+}
+
+export interface ActivityEntry {
+  Id: number;
+  Name: string;
+  ShortOverview?: string;
+  Overview?: string;
+  Type: string;
+  Date: string;
+  Severity: string;
+}
+
+export interface SystemInfo {
+  ServerName: string;
+  Version: string;
+  LocalAddress?: string;
+  HasPendingRestart?: boolean;
+  CanSelfRestart?: boolean;
+  OperatingSystemDisplayName?: string;
 }

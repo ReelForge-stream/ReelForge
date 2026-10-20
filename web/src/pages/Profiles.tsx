@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { defaultServer, login, publicUsers, userImage } from '../lib/api';
 import type { Session, User } from '../lib/types';
 import { Avatar, Icon, Logo } from '../lib/ui';
@@ -9,6 +10,10 @@ export default function Profiles({ onSignedIn, onManual }: { onSignedIn: (s: Ses
   const [users, setUsers] = useState<User[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pick, setPick] = useState<User | null>(null);
+  const nav = useNavigate();
+  const location = useLocation();
+  // Add/Manage Profiles go to Server settings → Profiles, which needs an administrator to sign in first.
+  const wantsManage = location.pathname.startsWith('/server');
 
   useEffect(() => {
     publicUsers(server)
@@ -64,7 +69,8 @@ export default function Profiles({ onSignedIn, onManual }: { onSignedIn: (s: Ses
         <PasswordPrompt user={pick} server={server} onBack={() => setPick(null)} onSignedIn={onSignedIn} />
       ) : (
         <div className="profiles">
-          <h1>Who’s watching?</h1>
+          <h1>{wantsManage ? 'Manage Profiles' : 'Who’s watching?'}</h1>
+          {wantsManage && <p className="profiles-sub">Choose an administrator profile to continue.</p>}
           <div className="profile-grid" role="list">
             {(users ?? []).map((u) => (
               <button key={u.Id} role="listitem" className="profile-tile" onClick={() => choose(u)}>
@@ -74,16 +80,20 @@ export default function Profiles({ onSignedIn, onManual }: { onSignedIn: (s: Ses
                 <span className="profile-name">{u.Name}</span>
               </button>
             ))}
-            <a className="profile-tile" href="/web/#/dashboard/users/add" role="listitem">
+            <button className="profile-tile" onClick={() => nav('/server/profiles?add=1')} role="listitem">
               <span className="profile-pic add" aria-hidden="true">
                 <span className="add-circle"><Icon.plus /></span>
               </span>
               <span className="profile-name">Add Profile</span>
-            </a>
+            </button>
           </div>
           {error && <p className="error">{error}</p>}
           <div className="profiles-actions">
-            <a className="btn-outline" href="/web/#/dashboard/users">Manage Profiles</a>
+            {wantsManage ? (
+              <button className="btn-outline" onClick={() => nav('/')}>Done</button>
+            ) : (
+              <button className="btn-outline" onClick={() => nav('/server/profiles')}>Manage Profiles</button>
+            )}
             <button className="link-btn" onClick={onManual}>Sign in another way</button>
           </div>
         </div>

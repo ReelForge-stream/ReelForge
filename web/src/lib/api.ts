@@ -1,5 +1,6 @@
 import type {
-  DupGroup, HeldFile, Item, Job, MediaSource, Overview, Session, Settings, SpaceSaverResult, User,
+  ActiveSession, ActivityEntry, AdminUser, DupGroup, HeldFile, Item, Job, MediaSource, Overview, ScheduledTask, Session, Settings,
+  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder,
 } from './types';
 import { demo } from './demo';
 
@@ -21,6 +22,8 @@ function deviceId(): string {
     return 'reelforge-browser';
   }
 }
+
+export { deviceId };
 
 /** The server is whatever served this page, unless a dev server URL is configured. */
 export function defaultServer(): string {
@@ -230,18 +233,42 @@ export class Api {
 
   // ---------- Playback ----------
 
-  async playbackInfo(itemId: string, mediaSourceId: string | undefined, startTicks: number, audioIndex?: number) {
-    return this.post<{ MediaSources: MediaSource[]; PlaySessionId: string }>(`/Items/${itemId}/PlaybackInfo?userId=${this.userId}`, {
-      DeviceProfile: browserProfile(),
-      MaxStreamingBitrate: maxBitrate(),
-      StartTimeTicks: startTicks,
-      MediaSourceId: mediaSourceId,
-      AudioStreamIndex: audioIndex,
-      EnableDirectPlay: true,
-      EnableDirectStream: true,
+  /**
+   * Asks the server how to play an item. Choosing a non-default audio track, a subtitle that has to be
+   * drawn into the picture, or a lower quality turns off direct play so the server builds a stream to match.
+   */
+  async playbackInfo(
+    itemId: string,
+    o: { mediaSourceId?: string; startTicks?: number; audioIndex?: number; subtitleIndex?: number; maxBitrate?: number; forceStream?: boolean } = {},
+  ) {
+    const bitrate = o.maxBitrate ?? maxBitrate();
+    const q = new URLSearchParams({ userId: this.userId });
+    if (o.mediaSourceId) q.set('mediaSourceId', o.mediaSourceId);
+    if (o.audioIndex != null) q.set('audioStreamIndex', String(o.audioIndex));
+    if (o.subtitleIndex != null) q.set('subtitleStreamIndex', String(o.subtitleIndex));
+    return this.post<{ MediaSources: MediaSource[]; PlaySessionId: string }>(`/Items/${itemId}/PlaybackInfo?${q}`, {
+      DeviceProfile: browserProfile(bitrate),
+      MaxStreamingBitrate: bitrate,
+      StartTimeTicks: o.startTicks ?? 0,
+      MediaSourceId: o.mediaSourceId,
+      AudioStreamIndex: o.audioIndex,
+      SubtitleStreamIndex: o.subtitleIndex ?? -1,
+      EnableDirectPlay: !o.forceStream,
+      EnableDirectStream: !o.forceStream,
       EnableTranscoding: true,
+      AllowVideoStreamCopy: true,
+      AllowAudioStreamCopy: true,
       AutoOpenLiveStream: true,
     });
+  }
+
+  /** This browser's own session on the server (what is actually being sent: codec, size, GPU or CPU). */
+  mySession() {
+    return this.get<ActiveSession[]>(`/Sessions?deviceId=${encodeURIComponent(deviceId())}`).then((r) => r[0]);
+  }
+
+  stopEncoding(playSessionId: string) {
+    return this.del(`/Videos/ActiveEncodings?deviceId=${encodeURIComponent(deviceId())}&playSessionId=${playSessionId}`).catch(() => undefined);
   }
 
   streamUrl(itemId: string, src: MediaSource, playSessionId: string): { url: string; hls: boolean } {
@@ -269,6 +296,69 @@ export class Api {
   subtitleUrl(path: string) {
     return `${this.session.server}${path}${path.includes('?') ? '&' : '?'}api_key=${this.session.token}`;
   }
+
+  // ---------- Server settings (administrators) ----------
+
+  admin = {
+    info: () => this.get<SystemInfo>('/System/Info'),
+    config: () => this.get<Record<string, unknown>>('/System/Configuration'),
+    saveConfig: (c: Record<string, unknown>) => this.post('/System/Configuration', c),
+    namedConfig: (key: 'encoding' | 'network') => this.get<Record<string, unknown>>(`/System/Configuration/${key}`),
+    saveNamedConfig: (key: 'encoding' | 'network', c: Record<string, unknown>) => this.post(`/System/Configuration/${key}`, c),
+    restart: () => this.post('/System/Restart'),
+    countries: () => this.get<{ Name: string; DisplayName: string; TwoLetterISORegionName: string }[]>('/Localization/Countries'),
+    cultures: () => this.get<{ DisplayName: string; TwoLetterISOLanguageName: string }[]>('/Localization/Cultures'),
+    ratings: () => this.get<{ Name: string; Value?: number; RatingScore?: { score: number; subScore?: number } }[]>('/Localization/ParentalRatings'),
+    plugins: () => this.get<{ Name: string; Version: string; Id: string; Status: string }[]>('/Plugins'),
+
+    libraries: () => this.get<VirtualFolder[]>('/Library/VirtualFolders'),
+    addLibrary: (name: string, collectionType: string, paths: string[]) =>
+      this.post(`/Library/VirtualFolders?name=${encodeURIComponent(name)}&collectionType=${collectionType}&refreshLibrary=true`, {
+        LibraryOptions: { PathInfos: paths.map((Path) => ({ Path })), EnableRealtimeMonitor: true, EnablePhotos: true, SaveLocalMetadata: false },
+      }),
+    renameLibrary: (name: string, newName: string) =>
+      this.post(`/Library/VirtualFolders/Name?name=${encodeURIComponent(name)}&newName=${encodeURIComponent(newName)}&refreshLibrary=false`),
+    removeLibrary: (name: string) => this.del(`/Library/VirtualFolders?name=${encodeURIComponent(name)}&refreshLibrary=false`),
+    addFolder: (name: string, path: string) =>
+      this.post('/Library/VirtualFolders/Paths?refreshLibrary=true', { Name: name, PathInfo: { Path: path } }),
+    removeFolder: (name: string, path: string) =>
+      this.del(`/Library/VirtualFolders/Paths?name=${encodeURIComponent(name)}&path=${encodeURIComponent(path)}&refreshLibrary=true`),
+    scanAll: () => this.post('/Library/Refresh'),
+    refreshLibrary: (itemId: string) =>
+      this.post(`/Items/${itemId}/Refresh?recursive=true&metadataRefreshMode=Default&imageRefreshMode=Default&replaceAllMetadata=false&replaceAllImages=false`),
+
+    users: () => this.get<AdminUser[]>('/Users'),
+    newUser: (Name: string, Password: string) => this.post<AdminUser>('/Users/New', { Name, Password }),
+    renameUser: (u: AdminUser, Name: string) => this.post(`/Users/${u.Id}`, { ...u, Name }),
+    setPassword: (id: string, NewPw: string) =>
+      this.post(`/Users/${id}/Password`, NewPw ? { NewPw, ResetPassword: false } : { ResetPassword: true }),
+    setPolicy: (id: string, p: UserPolicy) => this.post(`/Users/${id}/Policy`, p),
+    deleteUser: (id: string) => this.del(`/Users/${id}`),
+    setUserImage: async (id: string, file: File) => {
+      if (isDemo) return;
+      const b64 = await new Promise<string>((ok, bad) => {
+        const r = new FileReader();
+        r.onload = () => ok(String(r.result).split(',')[1] ?? '');
+        r.onerror = () => bad(r.error);
+        r.readAsDataURL(file);
+      });
+      const res = await fetch(`${this.session.server}/UserImage?userId=${id}`, {
+        method: 'POST',
+        headers: { Authorization: authHeader(this.session.token), 'Content-Type': file.type || 'image/jpeg' },
+        body: b64,
+      });
+      if (!res.ok) throw new ApiError(res.status, `The server answered ${res.status}.`);
+    },
+    removeUserImage: (id: string) => this.del(`/UserImage?userId=${id}`),
+
+    sessions: () => this.get<ActiveSession[]>('/Sessions?activeWithinSeconds=960'),
+    stopSession: (id: string) => this.post(`/Sessions/${id}/Playing/Stop`),
+    message: (id: string, text: string) => this.post(`/Sessions/${id}/Message`, { Header: 'Message from the server', Text: text, TimeoutMs: 8000 }),
+    activity: (limit = 40) => this.get<{ Items: ActivityEntry[] }>(`/System/ActivityLog/Entries?limit=${limit}`).then((r) => r.Items),
+    tasks: () => this.get<ScheduledTask[]>('/ScheduledTasks?isHidden=false'),
+    runTask: (id: string) => this.post(`/ScheduledTasks/Running/${id}`),
+    stopTask: (id: string) => this.del(`/ScheduledTasks/Running/${id}`),
+  };
 
   // ---------- Media Manager ----------
 
@@ -311,8 +401,9 @@ export interface PlaybackReport {
   SubtitleStreamIndex?: number;
 }
 
-function maxBitrate(): number {
-  // Let the user cap remote streaming in Settings later; default: generous on LAN.
+/** The quality picked in the player (remembered per browser). */
+export function maxBitrate(): number {
+  // Default: generous, so files play untouched on the home network.
   try {
     const v = Number(localStorage.getItem('reelforge.maxBitrate'));
     if (v > 0) return v;
@@ -327,19 +418,23 @@ function maxBitrate(): number {
  * as HEVC when the browser can decode it (half the bandwidth of H.264 for remote viewing),
  * otherwise H.264.
  */
-export function browserProfile() {
+export function browserProfile(bitrate = maxBitrate()) {
   const v = document.createElement('video');
   const can = (t: string) => typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(t);
   const hevc = can('video/mp4; codecs="hvc1.1.6.L120.90"') || v.canPlayType('video/mp4; codecs="hvc1.1.6.L120.90"') !== '';
   const av1 = can('video/mp4; codecs="av01.0.08M.08"');
   const mp4Video = ['h264', ...(hevc ? ['hevc'] : []), ...(av1 ? ['av1'] : [])].join(',');
+  // Chrome and Edge on computers open MKV files directly, so most of a typical library plays untouched.
+  const ua = navigator.userAgent;
+  const mkv = /Chrome\/|Edg\//.test(ua) && !/Mobile|Android|OPR\//.test(ua);
   return {
-    MaxStreamingBitrate: maxBitrate(),
-    MaxStaticBitrate: 200_000_000,
+    MaxStreamingBitrate: bitrate,
+    MaxStaticBitrate: Math.max(bitrate, 1_000_000),
     MusicStreamingTranscodingBitrate: 320_000,
     DirectPlayProfiles: [
       { Container: 'mp4,m4v', Type: 'Video', VideoCodec: mp4Video, AudioCodec: 'aac,mp3,opus,flac' },
       { Container: 'webm', Type: 'Video', VideoCodec: 'vp8,vp9,av1', AudioCodec: 'opus,vorbis' },
+      ...(mkv ? [{ Container: 'mkv', Type: 'Video', VideoCodec: `${mp4Video},vp8,vp9`, AudioCodec: 'aac,mp3,opus,flac,vorbis' }] : []),
       { Container: 'mp3,aac,flac,opus,webm', Type: 'Audio' },
     ],
     TranscodingProfiles: [
@@ -358,13 +453,14 @@ export function browserProfile() {
     ],
     ContainerProfiles: [],
     CodecProfiles: [],
+    // Text subtitles are always delivered as WebVTT (the format browsers draw natively); picture-based
+    // subtitles (Blu-ray PGS, DVD) are drawn into the video by the server.
     SubtitleProfiles: [
       { Format: 'vtt', Method: 'External' },
-      { Format: 'srt', Method: 'External' },
-      { Format: 'ass', Method: 'Encode' },
-      { Format: 'ssa', Method: 'Encode' },
       { Format: 'pgssub', Method: 'Encode' },
       { Format: 'dvdsub', Method: 'Encode' },
+      { Format: 'dvbsub', Method: 'Encode' },
+      { Format: 'xsub', Method: 'Encode' },
     ],
   };
 }

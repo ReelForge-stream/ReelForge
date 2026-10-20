@@ -193,6 +193,69 @@ function withUser(i: Item): Item {
   return { ...i, UserData: { ...i.UserData, IsFavorite: favorites.has(i.Id), Played: played.has(i.Id) || !!i.UserData?.Played } };
 }
 
+function demoSource(id: string) {
+  const sub = (Index: number, Language: string, Codec: string, extra: object = {}) => ({
+    Index, Type: 'Subtitle', Language, Codec, IsTextSubtitleStream: Codec !== 'PGSSUB',
+    DeliveryMethod: Codec === 'PGSSUB' ? 'Encode' : 'External', DeliveryUrl: Codec === 'PGSSUB' ? undefined : `/Videos/${id}/demo/Subtitles/${Index}/0/Stream.vtt`, ...extra,
+  });
+  return {
+    Id: 'demo', Container: 'mkv', Size: 18.4e9, Bitrate: 34_000_000, SupportsDirectPlay: true, DefaultAudioStreamIndex: 1, DefaultSubtitleStreamIndex: -1,
+    MediaStreams: [
+      { Index: 0, Type: 'Video', Codec: 'hevc', Width: 3840, Height: 2160, BitRate: 31_000_000, RealFrameRate: 23.976, VideoRangeType: 'HDR10' },
+      { Index: 1, Type: 'Audio', Codec: 'eac3', Language: 'eng', ChannelLayout: '5.1', Channels: 6, IsDefault: true },
+      { Index: 2, Type: 'Audio', Codec: 'aac', Language: 'eng', ChannelLayout: 'stereo', Channels: 2, Title: 'Commentary' },
+      { Index: 3, Type: 'Audio', Codec: 'ac3', Language: 'spa', ChannelLayout: '5.1', Channels: 6 },
+      sub(4, 'eng', 'subrip'),
+      sub(5, 'eng', 'subrip', { Title: 'SDH' }),
+      sub(6, 'eng', 'subrip', { IsForced: true }),
+      sub(7, 'spa', 'PGSSUB'),
+    ],
+  };
+}
+
+const basePolicy = {
+  IsAdministrator: false, IsHidden: false, IsDisabled: false, EnableRemoteAccess: true, EnableAllFolders: true, EnabledFolders: [] as string[],
+  EnableContentDeletion: false, EnableContentDownloading: true, EnableVideoPlaybackTranscoding: true, RemoteClientBitrateLimit: 0, BlockUnratedItems: [] as string[],
+  MaxParentalRating: null as number | null,
+};
+let users = [
+  { Id: 'demo', Name: 'Cade', HasPassword: true, LastActivityDate: new Date(Date.now() - 3600e3).toISOString(), Policy: { ...basePolicy, IsAdministrator: true, EnableContentDeletion: true } },
+  { Id: 'u2', Name: 'Jess', HasPassword: true, LastActivityDate: new Date(Date.now() - 86400e3).toISOString(), Policy: { ...basePolicy } },
+  { Id: 'u3', Name: 'Kids', HasPassword: false, LastActivityDate: new Date(Date.now() - 3 * 86400e3).toISOString(), Policy: { ...basePolicy, EnableRemoteAccess: false, MaxParentalRating: 10 as number | null, EnableAllFolders: false, EnabledFolders: ['lib-movies'] } },
+  { Id: 'u4', Name: 'Guest', HasPassword: true, Policy: { ...basePolicy, IsHidden: true, EnableRemoteAccess: false } },
+];
+let serverConfig: Record<string, unknown> = { ServerName: 'ReelForge', PreferredMetadataLanguage: 'en', MetadataCountryCode: 'US', RemoteClientBitrateLimit: 20_000_000 };
+let encoding: Record<string, unknown> = {
+  HardwareAccelerationType: 'nvenc', EnableHardwareEncoding: true, HardwareDecodingCodecs: ['h264', 'hevc', 'vc1', 'mpeg2video', 'vp9'], EnableDecodingColorDepth10Hevc: true,
+  EnableDecodingColorDepth10Vp9: true, AllowHevcEncoding: true, AllowAv1Encoding: false, EnableTonemapping: true, EnableThrottling: true, EnableSegmentDeletion: true, EncoderPreset: 'auto',
+};
+let network: Record<string, unknown> = {
+  EnableRemoteAccess: true, InternalHttpPort: 8096, PublicHttpPort: 8096, LocalNetworkSubnets: ['10.0.0.0/24', '100.64.0.0/10'], KnownProxies: [], AutoDiscovery: true, BaseUrl: '',
+};
+const ago = (h: number) => new Date(Date.now() - h * 3600e3).toISOString();
+const tasks = [
+  ['RefreshLibrary', 'Scan Media Library', 'Library', 5], ['DownloadSubtitles', 'Download missing subtitles', 'Library', 20], ['RefreshChapterImages', 'Extract Chapter Images', 'Library', 26],
+  ['PluginUpdates', 'Update Plugins', 'Application', 9], ['DeleteTranscodeFiles', 'Clean Transcode Directory', 'Maintenance', 2], ['OptimizeDatabaseTask', 'Optimize database', 'Maintenance', 30],
+].map(([Key, Name, Category, h], i) => ({ Id: `t${i}`, Key, Name, Category, State: 'Idle', LastExecutionResult: { StartTimeUtc: ago(h as number), EndTimeUtc: ago(h as number), Status: 'Completed' } }));
+const activity = [
+  ['Jess is playing Harbour Lights S01E04 on Living Room TV', 'Living Room TV', 0.2, 'Information'],
+  ['Cade successfully authenticated', 'IP address: 10.0.0.23', 1, 'Information'],
+  ['Kids is online from iPad', 'IP address: 10.0.0.41', 3, 'Information'],
+  ['ReelForge 0.3.0 was installed', 'Restart the server to finish', 9, 'Information'],
+  ['Failed sign-in for “guest”', 'IP address: 100.71.4.9', 30, 'Warning'],
+].map(([Name, ShortOverview, h, Severity], i) => ({ Id: i, Name, ShortOverview, Type: 'x', Date: ago(h as number), Severity }));
+function demoSessions() {
+  return [
+    {
+      Id: 'sess1', UserName: 'Jess', Client: 'Android TV', DeviceName: 'Living Room TV', RemoteEndPoint: '10.0.0.37', NowPlayingItem: episodes('s0', 1)[3],
+      PlayState: { PositionTicks: 21 * 60 * T, IsPaused: false, PlayMethod: 'Transcode' },
+      TranscodingInfo: { VideoCodec: 'hevc', AudioCodec: 'aac', Height: 1080, Width: 1920, Bitrate: 8_200_000, HardwareAccelerationType: 'nvenc', TranscodeReasons: ['AudioCodecNotSupported'] },
+    },
+    { Id: 'sess2', UserName: 'Cade', Client: 'ReelForge', DeviceName: 'Browser', RemoteEndPoint: '10.0.0.23', NowPlayingItem: movies[3], PlayState: { PositionTicks: 59 * 60 * T, IsPaused: true, PlayMethod: 'DirectPlay' } },
+    { Id: 'sess3', UserName: 'Kids', Client: 'ReelForge', DeviceName: 'iPad' },
+  ];
+}
+
 async function handle(method: string, path: string, body: unknown): Promise<unknown> {
   await new Promise((r) => setTimeout(r, 120));
   const [p, qs] = path.split('?');
@@ -208,7 +271,7 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   if (p === '/Environment/DirectoryContents') return ['Movies', 'TV', 'Videos', 'Music'].map((n) => ({ Name: n, Path: `${q.get('path')}${n}`, Type: 'Directory' }));
   if (p === '/Environment/ParentPath') return null;
   if (p === '/Environment/ValidatePath') return undefined;
-  if (p === '/Library/VirtualFolders' || p === '/Library/Refresh') return undefined;
+  if ((p === '/Library/VirtualFolders' && method !== 'GET') || p === '/Library/Refresh') return undefined;
   if (p === '/ReelForge/Network/Locations') return { Shares: [], Mapped: [{ Letter: 'Z:', Path: '\\\\10.0.0.201\\plexdata', Reachable: false }] };
   if (p === '/ReelForge/Network/Connect') return { Path: '\\\\10.0.0.201\\plexdata' };
   if (p === '/ReelForge/Network/Shares') return { Shares: ['backups', 'photos', 'plexdata'] };
@@ -261,7 +324,7 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     const id = p.split('/')[2];
     return { Items: episodes(id, Number(q.get('seasonId')?.split('-').pop() ?? 1)) };
   }
-  if (p.startsWith('/Items/') && p.endsWith('/PlaybackInfo')) return { MediaSources: [], PlaySessionId: 'demo' };
+  if (p.startsWith('/Items/') && p.endsWith('/PlaybackInfo')) return { MediaSources: [demoSource(p.split('/')[2])], PlaySessionId: 'demo' };
   if (p.startsWith('/Items/')) {
     const id = p.split('/')[2];
     const found = all.find((x) => x.Id === id);
@@ -269,7 +332,32 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     const [sid, sn, en] = id.split('-');
     return episodes(sid, Number(sn))[Number(en) - 1];
   }
+  // Server settings
+  if (p === '/Sessions' && method === 'GET') return q.has('deviceId') ? [] : demoSessions();
   if (p.startsWith('/Sessions')) return undefined;
+  if (p === '/System/Info') return { ServerName: 'MEDIA-PC', Version: '12.2.0', LocalAddress: 'http://10.0.0.50:8096', HasPendingRestart: false, CanSelfRestart: true };
+  if (p === '/System/Configuration') { if (method === 'POST') serverConfig = body as Record<string, unknown>; return serverConfig; }
+  if (p === '/System/Configuration/encoding') { if (method === 'POST') encoding = body as Record<string, unknown>; return encoding; }
+  if (p === '/System/Configuration/network') { if (method === 'POST') network = body as Record<string, unknown>; return network; }
+  if (p === '/System/Restart') return undefined;
+  if (p === '/Localization/Countries') return [['US', 'United States'], ['CA', 'Canada'], ['GB', 'United Kingdom'], ['AU', 'Australia']].map(([c, n]) => ({ Name: c, DisplayName: n, TwoLetterISORegionName: c }));
+  if (p === '/Localization/Cultures') return [['en', 'English'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German']].map(([c, n]) => ({ DisplayName: n, TwoLetterISOLanguageName: c }));
+  if (p === '/Localization/ParentalRatings') return [['G', 0], ['TV-Y', 0], ['TV-G', 0], ['TV-Y7', 7], ['PG', 10], ['TV-PG', 10], ['PG-13', 13], ['TV-14', 14], ['R', 17], ['TV-MA', 17], ['NC-17', 18]].map(([n, v]) => ({ Name: n, Value: v, RatingScore: { score: v } }));
+  if (p === '/Plugins') return [{ Name: 'ReelForge', Version: '0.3.0.0', Id: 'rf', Status: 'Active' }];
+  if (p === '/Library/VirtualFolders') return [
+    { Name: 'Movies', ItemId: 'lib-movies', CollectionType: 'movies', Locations: ['\\\\10.0.0.201\\plexdata\\Movies', '\\\\10.0.0.201\\plexdata\\Movies 4K'] },
+    { Name: 'TV Shows', ItemId: 'lib-shows', CollectionType: 'tvshows', Locations: ['\\\\10.0.0.201\\plexdata\\TV'] },
+  ];
+  if (p === '/Users' && method === 'GET') return users;
+  if (p === '/Users/New') { const u = { Id: `u${users.length + 1}`, Name: (body as { Name: string }).Name, HasPassword: !!(body as { Password: string }).Password, Policy: { ...users[1].Policy, IsAdministrator: false } }; users.push(u); return u; }
+  if (p.startsWith('/Users/') && p.endsWith('/Policy')) { const u = users.find((x) => x.Id === p.split('/')[2]); if (u) u.Policy = body as typeof u.Policy; return undefined; }
+  if (p.startsWith('/Users/') && method === 'DELETE') { users = users.filter((x) => x.Id !== p.split('/')[2]); return undefined; }
+  if (p.startsWith('/Users/')) return undefined;
+  if (p.startsWith('/UserImage')) return undefined;
+  if (p === '/ScheduledTasks') return tasks;
+  if (p.startsWith('/ScheduledTasks/Running/')) return undefined;
+  if (p === '/System/ActivityLog/Entries') return { Items: activity };
+  if (p.startsWith('/Videos/ActiveEncodings')) return undefined;
 
   // Media Manager
   if (p === '/ReelForge/Overview')
