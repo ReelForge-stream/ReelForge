@@ -3,6 +3,14 @@
     "guid": "6f1d0c52-8a3e-4c1b-9b7e-3d5a2e9f4c71",
     "versions": [
       {
+        "version": "0.4.1.0",
+        "changelog": "https://github.com/ReelForge-stream/ReelForge/releases/tag/v0.4.1",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/ReelForge-stream/ReelForge/releases/download/v0.4.1/ReelForge_0.4.1.0.zip",
+        "checksum": "9a53c7283a61dfc1fd3584d1cd7e5a09",
+        "timestamp": "2026-10-20T07:55:40Z"
+      },
+      {
         "version": "0.4.0.0",
         "changelog": "https://github.com/ReelForge-stream/ReelForge/releases/tag/v0.4.0",
         "targetAbi": "12.2.0.0",
