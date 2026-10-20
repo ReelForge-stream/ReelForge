@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { runtime } from '../lib/api';
 import type { Item } from '../lib/types';
-import { Art, Card, Icon, epCode, useApi, useAsync } from '../lib/ui';
+import { Art, Card, Icon, epCode, useApi, useAsync, usePoll } from '../lib/ui';
 
 export default function Home() {
   const api = useApi();
@@ -11,6 +11,9 @@ export default function Home() {
     const latest = await Promise.all(libs.map((l) => api.latest(l.Id).then((items) => ({ lib: l, items })).catch(() => ({ lib: l, items: [] as Item[] }))));
     return { resume, nextUp, latest };
   }, []);
+
+  const empty = !!data.data && !data.data.resume.length && !data.data.latest.some((l) => l.items.length);
+  usePoll(data.reload, 10000, empty); // libraries still scanning: fill in as titles appear
 
   if (data.error) return <div className="err-box">Couldn’t load your library: {data.error}</div>;
   if (!data.data) return <div className="loading">Loading…</div>;
@@ -96,8 +99,8 @@ function EmptyLibrary() {
     <div className="page">
       <div className="empty">
         <h2>Nothing here yet</h2>
-        <p className="muted">
-          Add a movies or TV folder in the server’s library settings and it will appear here after the first scan.
+        <p className="muted measure">
+          If you just added folders, they’re being scanned now. Titles appear here as they’re found; a big library can take a while the first time. No folders yet? Add them in Server settings → Libraries.
         </p>
       </div>
     </div>

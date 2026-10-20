@@ -470,3 +470,22 @@ public class PackagingTests
         Assert.Contains(names, n => n.StartsWith("ReelForgeWeb/assets/", StringComparison.Ordinal) && n.EndsWith(".js", StringComparison.Ordinal));
     }
 }
+
+public class FrontDoorTests
+{
+    [Theory]
+    [InlineData("/", true, "/reelforge/")]
+    [InlineData("", true, "/reelforge/")]
+    [InlineData("/", false, "/reelforge/setup")]
+    [InlineData("/web/", false, "/reelforge/setup")]
+    [InlineData("/web/index.html", false, "/reelforge/setup")]
+    [InlineData("/web/", true, "")]
+    [InlineData("/web/index.html", true, "")]
+    [InlineData("/reelforge/", false, "")]
+    [InlineData("/System/Info/Public", false, "")]
+    [InlineData("/Items", true, "")]
+    public void Sends_browsers_to_ReelForge(string path, bool setupDone, string expected)
+    {
+        Assert.Equal(expected, ReelForge.Services.FrontDoor.Redirect(path, setupDone));
+    }
+}

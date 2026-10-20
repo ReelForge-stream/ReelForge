@@ -17,7 +17,9 @@ The installer runs it all as a single Windows service, so there is nothing else 
 
 ## Install
 
-Download the latest **`ReelForge-Setup-x.y.z.exe`** from [Releases](https://github.com/ReelForge-stream/ReelForge/releases) and run it. Then open http://localhost:8096 to create your admin account and add your libraries.
+Download the latest **`ReelForge-Setup-x.y.z.exe`** from [Releases](https://github.com/ReelForge-stream/ReelForge/releases) and run it. ReelForge's setup opens in your browser: name the server, create the admin account, add your library folders, and choose whether to stream on the GPU.
+
+Afterwards, `http://<server>:8096/` always opens ReelForge. Advanced settings (users, transcoding, plugins) are under **Server settings** in the sidebar. That's the engine's admin dashboard, with ReelForge branding.
 
 **Media on a NAS?** Do two things:
 - Add libraries by network path (`\\nas\media\Movies`), not by mapped drive letter. A Windows service can't see `Z:` drives.

@@ -34,7 +34,7 @@ UninstallDisplayName=ReelForge Media Server
 CloseApplications=no
 
 [Messages]
-WelcomeLabel2=This installs ReelForge {#AppVersion} — your media server with the ReelForge interface and Media Manager, running on the Jellyfin {#JellyfinVersion} engine.%n%nIt runs as a Windows service in the background and can run alongside Plex while you switch over.
+WelcomeLabel2=This installs ReelForge {#AppVersion}: your media server, with the Media Manager for duplicates and disk space.%n%nIt runs as a Windows service in the background and can run alongside Plex while you switch over. Built on the open-source Jellyfin {#JellyfinVersion} engine.
 
 [Dirs]
 Name: "{commonappdata}\ReelForge\data"
@@ -79,7 +79,7 @@ Filename: "{app}\ReelForgeService.exe"; Parameters: "install"; Flags: runhidden 
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""ReelForge Media Server"""; Flags: runhidden waituntilterminated; Tasks: firewall
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""ReelForge Media Server"" dir=in action=allow protocol=TCP localport=8096 profile=private,domain"; Flags: runhidden waituntilterminated; Tasks: firewall
 Filename: "{app}\ReelForgeService.exe"; Parameters: "start"; Flags: runhidden waituntilterminated; StatusMsg: "Starting ReelForge..."
-Filename: "http://localhost:8096/web/#/wizardstart.html"; Description: "Open ReelForge to finish setup"; Flags: postinstall shellexec nowait skipifsilent; Check: IsFirstInstall
+Filename: "http://localhost:8096/"; Description: "Open ReelForge to finish setup"; Flags: postinstall shellexec nowait skipifsilent; Check: IsFirstInstall
 
 [UninstallRun]
 Filename: "{app}\ReelForgeService.exe"; Parameters: "stop"; Flags: runhidden waituntilterminated; RunOnceId: "StopService"

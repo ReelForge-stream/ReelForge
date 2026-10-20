@@ -79,6 +79,7 @@ Expand-Archive $jfZip -DestinationPath $stage
 Rename-Item (Join-Path $stage 'jellyfin') 'server'
 if (-not (Test-Path (Join-Path $stage 'server\ffmpeg.exe'))) { throw 'This Jellyfin build has no ffmpeg.exe; check the download.' }
 Copy-Item $winsw (Join-Path $stage 'ReelForgeService.exe')
+& (Join-Path $here 'rebrand-web.ps1') -WebDir (Join-Path $stage 'server\jellyfin-web') -OverridesDir (Join-Path $root 'brand\web-overrides')
 Copy-Item (Join-Path $root 'server\ReelForge\bin\Release\net10.0\ReelForge.dll') (Join-Path $stage 'module')
 
 $meta = [ordered]@{

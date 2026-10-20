@@ -1,9 +1,11 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
 import { Api, isDemo, loadSession, saveSession } from './lib/api';
 import type { Session } from './lib/types';
-import { ApiContext, Icon, Logo, ToastHost, useApi, useAsync } from './lib/ui';
+import { ApiContext, Icon, Logo, ToastHost, useApi, useAsync, usePoll } from './lib/ui';
 import Login from './pages/Login';
+import Setup from './pages/Setup';
+import { setup } from './lib/setup';
 import Home from './pages/Home';
 import Library from './pages/Library';
 import Details from './pages/Details';
@@ -21,6 +23,16 @@ const Player = lazy(() => import('./pages/Player'));
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
+  // null = still checking; false = this server hasn't been set up yet
+  const [setupDone, setSetupDone] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (isDemo) {
+      setSetupDone(!new URLSearchParams(location.search).has('setup'));
+      return;
+    }
+    setup.info().then((i) => setSetupDone(i.StartupWizardCompleted)).catch(() => setSetupDone(true));
+  }, []);
   const api = useMemo(() => (session ? new Api(session) : null), [session]);
 
   const signIn = (s: Session) => {
@@ -35,7 +47,17 @@ export default function App() {
   return (
     <BrowserRouter basename="/reelforge">
       <ToastHost>
-        {!api ? (
+        {setupDone === null ? (
+          <div className="login" />
+        ) : !setupDone ? (
+          <Setup
+            onDone={(s) => {
+              setSetupDone(true);
+              signIn(s);
+              history.replaceState(null, '', '/reelforge/');
+            }}
+          />
+        ) : !api ? (
           <Login onSignedIn={signIn} />
         ) : (
           <ApiContext.Provider value={api}>
@@ -56,6 +78,7 @@ export default function App() {
                     <Route path="settings" element={<ManagerSettings />} />
                   </Route>
                 )}
+                <Route path="setup" element={<Navigate to="/" replace />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
@@ -70,6 +93,8 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
   const api = useApi();
   const nav = useNavigate();
   const views = useAsync(() => api.views(), []);
+  // Right after setup the libraries are still being created: keep checking until they appear.
+  usePoll(() => api.views().then(views.setData).catch(() => undefined), 4000, !!views.data && views.data.length === 0);
   const libs = (views.data ?? []).filter((v) => ['movies', 'tvshows', 'homevideos', 'mixed', undefined].includes(v.CollectionType));
   const iconFor = (t?: string) => (t === 'movies' ? <Icon.film /> : t === 'tvshows' ? <Icon.tv /> : <Icon.folder />);
 
@@ -101,6 +126,10 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
               <Icon.manager />
               Media Manager
             </NavLink>
+            <a href="/web/#/dashboard" className="navlike-link">
+              <Icon.settings />
+              Server settings
+            </a>
           </>
         )}
         <div className="spacer" />

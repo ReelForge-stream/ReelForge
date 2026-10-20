@@ -171,6 +171,16 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   const q = new URLSearchParams(qs);
   const all = [...movies, ...shows];
 
+  // first-run setup (demo: add &setup to the URL)
+  if (p === '/System/Info/Public') return { ServerName: 'ReelForge', Version: '12.2.0', StartupWizardCompleted: true };
+  if (p === '/Startup/Configuration' && method === 'GET') return { ServerName: '', UICulture: 'en-US', MetadataCountryCode: 'US', PreferredMetadataLanguage: 'en' };
+  if (p === '/Startup/User' && method === 'GET') return { Name: 'root' };
+  if (p.startsWith('/Startup/')) return undefined;
+  if (p === '/Environment/Drives') return [{ Name: 'C:\\', Path: 'C:\\', Type: 'Directory' }, { Name: 'D:\\', Path: 'D:\\', Type: 'Directory' }];
+  if (p === '/Environment/DirectoryContents') return ['Movies', 'TV', 'Videos', 'Music'].map((n) => ({ Name: n, Path: `${q.get('path')}${n}`, Type: 'Directory' }));
+  if (p === '/Environment/ParentPath') return null;
+  if (p === '/Environment/ValidatePath') return undefined;
+  if (p === '/Library/VirtualFolders' || p === '/Library/Refresh') return undefined;
   if (p === '/UserViews') return { Items: views };
   if (p === '/UserItems/Resume') return { Items: movies.filter((m) => (m.UserData?.PlayedPercentage ?? 0) > 0) };
   if (p === '/Shows/NextUp') return { Items: shows.map((s) => episodes(s.Id, 1)[3]) };

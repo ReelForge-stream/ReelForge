@@ -80,5 +80,6 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ConversionQueue>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<ConversionQueue>());
         serviceCollection.AddHostedService<UpdateFeed>();
+        serviceCollection.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, FrontDoor>();
     }
 }

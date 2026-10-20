@@ -193,6 +193,7 @@ export const Icon = {
   play: () => (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.6-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" /></svg>),
   back: () => (<svg viewBox="0 0 24 24" {...S}><path d="M15 5l-7 7 7 7" /></svg>),
   check: () => (<svg viewBox="0 0 24 24" {...S}><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>),
+  settings: () => (<svg viewBox="0 0 24 24" {...S}><circle cx="12" cy="12" r="3" /><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6" /></svg>),
   logout: () => (<svg viewBox="0 0 24 24" {...S}><path d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4M10 16l-4-4 4-4M6 12h10" /></svg>),
 };
 
