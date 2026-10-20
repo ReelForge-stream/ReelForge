@@ -181,6 +181,9 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   if (p === '/Environment/ParentPath') return null;
   if (p === '/Environment/ValidatePath') return undefined;
   if (p === '/Library/VirtualFolders' || p === '/Library/Refresh') return undefined;
+  if (p === '/ReelForge/Network/Locations') return { Shares: [], Mapped: [{ Letter: 'Z:', Path: '\\\\10.0.0.201\\plexdata', Reachable: false }] };
+  if (p === '/ReelForge/Network/Connect') return { Path: '\\\\10.0.0.201\\plexdata' };
+  if (p === '/ReelForge/Network/Shares') return { Shares: ['backups', 'photos', 'plexdata'] };
   if (p === '/UserViews') return { Items: views };
   if (p === '/UserItems/Resume') return { Items: movies.filter((m) => (m.UserData?.PlayedPercentage ?? 0) > 0) };
   if (p === '/Shows/NextUp') return { Items: shows.map((s) => episodes(s.Id, 1)[3]) };

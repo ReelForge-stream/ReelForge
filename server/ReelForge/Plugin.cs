@@ -79,6 +79,8 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<EncoderProbe>();
         serviceCollection.AddSingleton<ConversionQueue>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<ConversionQueue>());
+        serviceCollection.AddSingleton<NetworkShares>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<NetworkShares>());
         serviceCollection.AddHostedService<UpdateFeed>();
         serviceCollection.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, FrontDoor>();
     }

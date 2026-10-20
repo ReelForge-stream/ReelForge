@@ -152,7 +152,7 @@ export default function Setup({ onDone }: { onDone: (s: Session) => void }) {
             <h2>Add your libraries</h2>
             <p className="muted">Point each library at the folders that hold your files. Nothing is moved or renamed.</p>
             <div className="note-box">
-              <strong>Files on a NAS?</strong> Use the network path, like <code>\\nas\media\Movies</code>, not a drive letter such as <code>Z:</code>. If a share won’t add, the ReelForge service needs your Windows account: open <em>services.msc</em>, then ReelForge Media Server → Log On.
+              <strong>Files on a NAS?</strong> Click Browse and open it under Network, or type its network path, like <code>\\nas\media\Movies</code>. Drive letters such as <code>Z:</code> belong to your Windows login, so ReelForge uses the path behind them and signs in to the NAS itself.
             </div>
             {libs.map((l) => (
               <LibraryEditor
@@ -213,23 +213,24 @@ function LibraryEditor({ lib, onChange, onRemove }: { lib: Lib; onChange: (l: Li
   const [err, setErr] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [signIn, setSignIn] = useState<string | null>(null); // network path waiting for a NAS sign-in
   const kind = KINDS.find((k) => k.kind === lib.kind)!;
 
+  const clean = (p: string) => p.trim().replace(/[\\/]+$/, '') || p.trim();
+
   async function add(p: string) {
-    const clean = p.trim().replace(/[\\/]+$/, '') || p.trim();
-    if (!clean) return;
+    const c = clean(p);
+    if (!c) return;
     setErr(null);
     setChecking(true);
     try {
-      await setup.validate(clean);
-      if (!lib.paths.includes(clean)) onChange({ ...lib, paths: [...lib.paths, clean] });
+      await setup.validate(c);
+      if (!lib.paths.includes(c)) onChange({ ...lib, paths: [...lib.paths, c] });
       setPath('');
+      setSignIn(null);
     } catch {
-      setErr(
-        clean.startsWith('\\\\')
-          ? 'The server can’t open that share. Check the path, then make sure the ReelForge service runs as a Windows account that can reach it (services.msc → ReelForge Media Server → Log On).'
-          : 'The server can’t find that folder. Check the path and try again.',
-      );
+      if (c.startsWith('\\\\') || c.startsWith('//')) setSignIn(c);
+      else setErr('The server can’t find that folder. Check the path and try again.');
     } finally {
       setChecking(false);
     }
@@ -259,6 +260,13 @@ function LibraryEditor({ lib, onChange, onRemove }: { lib: Lib; onChange: (l: Li
         <button className="btn" disabled={!path.trim() || checking}>{checking ? 'Checking…' : 'Add'}</button>
       </form>
       {err && <p className="error small">{err}</p>}
+      {signIn && (
+        <NasSignIn
+          path={signIn}
+          onConnected={() => add(signIn)}
+          onCancel={() => setSignIn(null)}
+        />
+      )}
       {browsing && (
         <FolderPicker
           onPick={(p) => {
@@ -272,49 +280,245 @@ function LibraryEditor({ lib, onChange, onRemove }: { lib: Lib; onChange: (l: Li
   );
 }
 
+/** Asks for the NAS username and password, then has the server sign in to the share. */
+function NasSignIn({ path, onConnected, onCancel, compact }: { path: string; onConnected: (root: string) => void; onCancel?: () => void; compact?: boolean }) {
+  const [user, setUser] = useState('');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function go(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await setup.connect(path, user, pw);
+      onConnected(r.Path);
+    } catch (x) {
+      setErr((x as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className={compact ? 'nas-signin compact' : 'nas-signin'} onSubmit={go}>
+      {!compact && (
+        <p className="small">
+          <strong>Sign in to your NAS</strong> to use <code>{path}</code>. ReelForge saves this sign-in, encrypted on this computer, and reconnects by itself after restarts.
+        </p>
+      )}
+      <div className="nas-fields">
+        <input className="input" placeholder="NAS username" aria-label="NAS username" autoComplete="off" value={user} onChange={(e) => setUser(e.target.value)} />
+        <input className="input" type="password" placeholder="NAS password" aria-label="NAS password" autoComplete="off" value={pw} onChange={(e) => setPw(e.target.value)} />
+        <button className="btn primary" disabled={busy}>{busy ? 'Connecting…' : 'Connect'}</button>
+        {onCancel && <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>}
+      </div>
+      {err && <p className="error small">{err}</p>}
+    </form>
+  );
+}
+
+type NetLoc = { label: string; path: string; ok: boolean };
+
 function FolderPicker({ onPick, onCancel }: { onPick: (path: string) => void; onCancel: () => void }) {
   const [cwd, setCwd] = useState<string | null>(null);
   const [entries, setEntries] = useState<FsEntry[]>([]);
+  const [net, setNet] = useState<NetLoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [needsSignIn, setNeedsSignIn] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     (cwd ? setup.folders(cwd) : setup.drives())
       .then((r) => setEntries(r))
-      .catch(() => setEntries([]))
+      .catch(() => {
+        setEntries([]);
+        if (cwd?.startsWith('\\\\')) {
+          setNeedsSignIn(cwd);
+          setCwd(null);
+        }
+      })
       .finally(() => setLoading(false));
   }, [cwd]);
+
+  const loadNet = () =>
+    setup
+      .locations()
+      .then((l) => {
+        const seen = new Set<string>();
+        const list: NetLoc[] = [];
+        for (const s of l.Shares) {
+          seen.add(s.Path.toLowerCase());
+          list.push({ label: s.Path, path: s.Path, ok: s.Connected });
+        }
+        for (const m of l.Mapped) {
+          if (seen.has(m.Path.toLowerCase())) continue;
+          list.push({ label: `${m.Letter}  ${m.Path}`, path: m.Path, ok: m.Reachable });
+        }
+        setNet(list);
+      })
+      .catch(() => setNet([]));
+
+  useEffect(() => {
+    loadNet();
+  }, []);
+
+  const open = (loc: NetLoc) => (loc.ok ? setCwd(loc.path) : setNeedsSignIn(loc.path));
 
   const up = async () => {
     if (!cwd) return;
     const parent = await setup.parent(cwd).catch(() => null);
-    setCwd(parent || null);
+    // Above a share root there is nothing to list: go back to the start.
+    setCwd(parent && parent !== cwd && !/^\\\\[^\\]+\\?$/.test(parent) ? parent : null);
   };
 
   return (
     <div className="dialog-back" onClick={onCancel}>
       <div className="dialog picker" role="dialog" aria-modal="true" aria-label="Choose a folder" onClick={(e) => e.stopPropagation()}>
         <h2>Choose a folder</h2>
-        <p className="muted small">{cwd ?? 'Drives on the server'}</p>
-        <div className="picker-list">
-          {cwd && (
-            <button type="button" className="picker-row" onClick={up}>
-              ↑ Up one level
-            </button>
-          )}
-          {loading && <p className="muted">Loading…</p>}
-          {!loading && entries.length === 0 && <p className="muted">No folders here. NAS shares don’t appear in this list; type their path instead.</p>}
-          {entries.map((e) => (
-            <button key={e.Path} type="button" className="picker-row" onClick={() => setCwd(e.Path)}>
-              {e.Name || e.Path}
-            </button>
-          ))}
-        </div>
+        <p className="muted small">{cwd ?? 'Pick a drive on this computer or a network share'}</p>
+
+        {needsSignIn ? (
+          <div className="picker-list">
+            <p className="small">
+              Sign in to <code>{needsSignIn}</code>
+            </p>
+            <NasSignIn
+              compact
+              path={needsSignIn}
+              onConnected={(root) => {
+                const target = needsSignIn.toLowerCase().startsWith(root.toLowerCase()) ? needsSignIn : root;
+                setNeedsSignIn(null);
+                loadNet();
+                setCwd(target);
+              }}
+              onCancel={() => setNeedsSignIn(null)}
+            />
+          </div>
+        ) : connecting ? (
+          <ConnectShare
+            onCancel={() => setConnecting(false)}
+            onConnected={(root) => {
+              setConnecting(false);
+              loadNet();
+              setCwd(root);
+            }}
+          />
+        ) : (
+          <div className="picker-list">
+            {cwd && (
+              <button type="button" className="picker-row" onClick={up}>
+                ↑ Up one level
+              </button>
+            )}
+            {!cwd && <p className="picker-group">This computer</p>}
+            {loading && <p className="muted">Loading…</p>}
+            {!loading && cwd && entries.length === 0 && <p className="muted">No folders inside this one.</p>}
+            {entries.map((e) => (
+              <button key={e.Path} type="button" className="picker-row" onClick={() => setCwd(e.Path)}>
+                {e.Name || e.Path}
+              </button>
+            ))}
+            {!cwd && (
+              <>
+                <p className="picker-group">Network</p>
+                {net.map((n) => (
+                  <button key={n.path} type="button" className="picker-row" onClick={() => open(n)}>
+                    {n.label}
+                    <span className="muted small">{n.ok ? 'Connected' : 'Sign in'}</span>
+                  </button>
+                ))}
+                <button type="button" className="picker-row add" onClick={() => setConnecting(true)}>
+                  + Connect to a network share…
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="actions">
           <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
           <button type="button" className="btn primary" disabled={!cwd} onClick={() => cwd && onPick(cwd)}>Use this folder</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Address + sign-in, then pick one of the NAS's shares. */
+function ConnectShare({ onConnected, onCancel }: { onConnected: (root: string) => void; onCancel: () => void }) {
+  const [addr, setAddr] = useState('');
+  const [user, setUser] = useState('');
+  const [pw, setPw] = useState('');
+  const [shares, setShares] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const server = addr.trim().replace(/^[\\/]+/, '').split(/[\\/]/)[0];
+  const shareInAddr = addr.trim().replace(/^[\\/]+/, '').split(/[\\/]/)[1];
+
+  async function find(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      if (shareInAddr) {
+        const r = await setup.connect(`\\\\${server}\\${shareInAddr}`, user, pw);
+        onConnected(r.Path);
+      } else {
+        setShares((await setup.sharesOn(server, user, pw)).Shares);
+      }
+    } catch (x) {
+      setErr((x as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pick(share: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await setup.connect(`\\\\${server}\\${share}`, user, pw);
+      onConnected(r.Path);
+    } catch (x) {
+      setErr((x as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="picker-list">
+      {shares === null ? (
+        <form className="nas-signin compact" onSubmit={find}>
+          <div className="field">
+            <label htmlFor="nas-addr">NAS address</label>
+            <input id="nas-addr" className="input" placeholder="10.0.0.201 or \\nas\media" value={addr} onChange={(e) => setAddr(e.target.value)} autoFocus required />
+          </div>
+          <div className="nas-fields">
+            <input className="input" placeholder="NAS username" aria-label="NAS username" autoComplete="off" value={user} onChange={(e) => setUser(e.target.value)} />
+            <input className="input" type="password" placeholder="NAS password" aria-label="NAS password" autoComplete="off" value={pw} onChange={(e) => setPw(e.target.value)} />
+          </div>
+          <div className="nas-fields">
+            <button className="btn primary" disabled={busy || !server}>{busy ? 'Connecting…' : shareInAddr ? 'Connect' : 'Show shares'}</button>
+            <button type="button" className="btn ghost" onClick={onCancel}>Back</button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <p className="picker-group">Shares on {server}</p>
+          {shares.length === 0 && <p className="muted">This NAS isn’t sharing any folders with that account.</p>}
+          {shares.map((sh) => (
+            <button key={sh} type="button" className="picker-row" disabled={busy} onClick={() => pick(sh)}>
+              {sh}
+            </button>
+          ))}
+          <button type="button" className="btn ghost sm" style={{ justifySelf: "start" }} onClick={() => setShares(null)}>Back</button>
+        </>
+      )}
+      {err && <p className="error small">{err}</p>}
     </div>
   );
 }

@@ -25,7 +25,15 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
     headers: { ...H, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`${res.status}`);
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      msg = (await res.json()).error ?? msg;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(msg);
+  }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
@@ -53,4 +61,13 @@ export const setup = {
     }),
   remoteAccess: (enable: boolean) => call('POST', '/Startup/RemoteAccess', { EnableRemoteAccess: enable, EnableAutomaticPortMapping: false }),
   complete: () => call('POST', '/Startup/Complete'),
+
+  // NAS access: the server signs in to shares itself (see NetworkShares on the server)
+  locations: () =>
+    call<{ Shares: { Id: string; Path: string; Username: string; Connected: boolean }[]; Mapped: { Letter: string; Path: string; Reachable: boolean }[] }>(
+      'GET',
+      '/ReelForge/Network/Locations',
+    ),
+  connect: (Path: string, Username: string, Password: string) => call<{ Path: string }>('POST', '/ReelForge/Network/Connect', { Path, Username, Password, Save: true }),
+  sharesOn: (Server: string, Username: string, Password: string) => call<{ Shares: string[] }>('POST', '/ReelForge/Network/Shares', { Server, Username, Password }),
 };

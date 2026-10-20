@@ -489,3 +489,38 @@ public class FrontDoorTests
         Assert.Equal(expected, ReelForge.Services.FrontDoor.Redirect(path, setupDone));
     }
 }
+
+public class NetworkShareTests
+{
+    [Theory]
+    [InlineData(@"\\10.0.0.201\plexdata\MOVIES", @"\\10.0.0.201\plexdata")]
+    [InlineData(@"\\nas\media", @"\\nas\media")]
+    [InlineData("//nas/media/TV", @"\\nas\media")]
+    [InlineData(@"  \\nas\media\  ", @"\\nas\media")]
+    [InlineData(@"\\nas", null)]
+    [InlineData(@"Z:\Movies", null)]
+    public void Finds_the_share_root(string path, string? expected)
+    {
+        Assert.Equal(expected, ReelForge.Services.NetworkShares.ShareRoot(path));
+    }
+
+    [Theory]
+    [InlineData(1326, "username or password")]
+    [InlineData(86, "username or password")]
+    [InlineData(53, "Can't find that NAS")]
+    [InlineData(67, "no share by that name")]
+    [InlineData(5, "Access denied")]
+    public void Explains_windows_errors_plainly(int code, string expected)
+    {
+        Assert.Contains(expected, ReelForge.Services.NetworkShares.Explain(code));
+    }
+
+    [Fact]
+    public void Saved_passwords_round_trip()
+    {
+        string stored = ReelForge.Services.Secret.Protect("hunter2!");
+        Assert.DoesNotContain("hunter2", stored);
+        Assert.Equal("hunter2!", ReelForge.Services.Secret.Unprotect(stored));
+        Assert.Equal(string.Empty, ReelForge.Services.Secret.Unprotect(string.Empty));
+    }
+}
