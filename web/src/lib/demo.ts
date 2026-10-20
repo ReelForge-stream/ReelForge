@@ -193,6 +193,16 @@ function withUser(i: Item): Item {
   return { ...i, UserData: { ...i.UserData, IsFavorite: favorites.has(i.Id), Played: played.has(i.Id) || !!i.UserData?.Played } };
 }
 
+function demoArt(i: number, wide: boolean, type: string) {
+  const h = (i * 47 + 20) % 360;
+  const [w, ht] = type === 'Logo' ? [800, 310] : wide ? [1920, 1080] : [1000, 1500];
+  const svg = type === 'Logo'
+    ? `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 310'><text x='400' y='190' font-size='110' font-family='sans-serif' font-weight='800' text-anchor='middle' fill='hsl(${h} 80% 65%)'>TITLE</text></svg>`
+    : `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${ht}'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='hsl(${h} 60% 45%)'/><stop offset='1' stop-color='hsl(${(h + 40) % 360} 50% 15%)'/></linearGradient></defs><rect width='100%' height='100%' fill='url(%23g)'/></svg>`;
+  const url = `data:image/svg+xml;utf8,${svg.replace(/#/g, '%23')}`;
+  return { ProviderName: 'TheMovieDb', Url: url, ThumbnailUrl: url, Width: w, Height: ht, Language: i % 3 ? 'en' : undefined, CommunityRating: 7.8 - i * 0.3, VoteCount: 40 - i, Type: type };
+}
+
 function demoSource(id: string) {
   const sub = (Index: number, Language: string, Codec: string, extra: object = {}) => ({
     Index, Type: 'Subtitle', Language, Codec, IsTextSubtitleStream: Codec !== 'PGSSUB',
@@ -322,15 +332,23 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   }
   if (p.startsWith('/Shows/') && p.endsWith('/Episodes')) {
     const id = p.split('/')[2];
-    return { Items: episodes(id, Number(q.get('seasonId')?.split('-').pop() ?? 1)) };
+    return { Items: episodes(id, Number(q.get('seasonId')?.split('-').pop() ?? 1)).map(withUser) };
   }
+  // Artwork editor
+  if (p.startsWith('/Items/') && p.endsWith('/Images') && method === 'GET') return [{ ImageType: 'Primary', ImageTag: 'x', Width: 1000, Height: 1500 }];
+  if (p.startsWith('/Items/') && p.endsWith('/RemoteImages')) {
+    const type = q.get('type') ?? 'Thumb';
+    const wide = type !== 'Primary';
+    return { Images: Array.from({ length: type === 'Logo' ? 4 : 9 }, (_, i) => demoArt(i, wide, type)), TotalRecordCount: 9, Providers: ['TheMovieDb'] };
+  }
+  if (p.includes('/RemoteImages/Download') || p.includes('/Images/') || p.endsWith('/Refresh')) return undefined;
   if (p.startsWith('/Items/') && p.endsWith('/PlaybackInfo')) return { MediaSources: [demoSource(p.split('/')[2])], PlaySessionId: 'demo' };
   if (p.startsWith('/Items/')) {
     const id = p.split('/')[2];
     const found = all.find((x) => x.Id === id);
     if (found) return { ...withUser(found), People: people, MediaStreams: [{ Type: 'Video', Height: found.Id === 'm3' ? 2160 : 1080 }] };
     const [sid, sn, en] = id.split('-');
-    return episodes(sid, Number(sn))[Number(en) - 1];
+    return withUser(episodes(sid, Number(sn))[Number(en) - 1]);
   }
   // Server settings
   if (p === '/Sessions' && method === 'GET') return q.has('deviceId') ? [] : demoSessions();

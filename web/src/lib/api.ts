@@ -297,6 +297,45 @@ export class Api {
     return `${this.session.server}${path}${path.includes('?') ? '&' : '?'}api_key=${this.session.token}`;
   }
 
+  // ---------- Artwork and metadata (administrators) ----------
+
+  art = {
+    current: (id: string) => this.get<{ ImageType: string; ImageIndex?: number; ImageTag: string; Width?: number; Height?: number }[]>(`/Items/${id}/Images`),
+    remote: (id: string, type: ImageKind, allLanguages: boolean) =>
+      this.get<{ Images: RemoteImage[]; TotalRecordCount: number; Providers: string[] }>(
+        `/Items/${id}/RemoteImages?type=${type}&includeAllLanguages=${allLanguages}&limit=120`,
+      ),
+    useRemote: (id: string, type: ImageKind, url: string) =>
+      this.post(`/Items/${id}/RemoteImages/Download?type=${type}&imageUrl=${encodeURIComponent(url)}`),
+    upload: async (id: string, type: ImageKind, file: File) => {
+      if (isDemo) return;
+      const b64 = await new Promise<string>((ok, bad) => {
+        const r = new FileReader();
+        r.onload = () => ok(String(r.result).split(',')[1] ?? '');
+        r.onerror = () => bad(r.error);
+        r.readAsDataURL(file);
+      });
+      const res = await fetch(`${this.session.server}/Items/${id}/Images/${type}`, {
+        method: 'POST',
+        headers: { Authorization: authHeader(this.session.token), 'Content-Type': file.type || 'image/jpeg' },
+        body: b64,
+      });
+      if (!res.ok) throw new ApiError(res.status, `The server answered ${res.status}.`);
+    },
+    remove: (id: string, type: ImageKind, index = 0) => this.del(`/Items/${id}/Images/${type}/${index}`),
+    /** Re-read the title's info and artwork from the internet. */
+    refresh: (id: string, replaceImages: boolean) =>
+      this.post(
+        `/Items/${id}/Refresh?recursive=true&metadataRefreshMode=FullRefresh&imageRefreshMode=FullRefresh&replaceAllMetadata=false&replaceAllImages=${replaceImages}`,
+      ),
+  };
+
+  /** Image URL for a specific image type and tag (used by the artwork editor). */
+  imageUrl(id: string, type: ImageKind, tag: string, width: number, index = 0): string | undefined {
+    if (isDemo) return undefined;
+    return `${this.session.server}/Items/${id}/Images/${type}${type === 'Backdrop' ? `/${index}` : ''}?maxWidth=${width}&quality=90&tag=${tag}`;
+  }
+
   // ---------- Server settings (administrators) ----------
 
   admin = {
@@ -387,6 +426,20 @@ export class Api {
     enableStreamingGpu: () => this.post('/ReelForge/Gpu/EnableStreamingAcceleration'),
     refreshGpu: () => this.post('/ReelForge/Gpu/Refresh'),
   };
+}
+
+export type ImageKind = 'Primary' | 'Thumb' | 'Backdrop' | 'Logo';
+
+export interface RemoteImage {
+  ProviderName: string;
+  Url: string;
+  ThumbnailUrl?: string;
+  Width?: number;
+  Height?: number;
+  Language?: string;
+  CommunityRating?: number;
+  VoteCount?: number;
+  Type: string;
 }
 
 export interface PlaybackReport {

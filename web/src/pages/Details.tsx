@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Item } from '../lib/types';
+import { publishItem, useItemMenu, useLiveItem, useMenuTrigger, useOnItemUpdated } from '../lib/itemMenu';
 import { Art, Icon, isRecent, useApi, useAsync, useDetailsLink, useToast } from '../lib/ui';
 
 /** Figma: "MovieDetails / Inside" (118:2845), an 850px overlay above the page it was opened from. */
@@ -10,6 +11,7 @@ export default function Details({ hasBackground }: { hasBackground: boolean }) {
   const nav = useNavigate();
   const item = useAsync(() => api.item(id), [id]);
   const panel = useRef<HTMLDivElement>(null);
+  useOnItemUpdated(id, item.reload); // artwork or watched state changed from a menu
 
   const close = () => (hasBackground ? nav(-1) : nav('/', { replace: true }));
 
@@ -38,13 +40,13 @@ export default function Details({ hasBackground }: { hasBackground: boolean }) {
         </button>
         {item.error && <p className="err-box">Couldn’t load this title: {item.error}</p>}
         {!item.data && !item.error && <div className="details-hero placeholder" />}
-        {item.data && <DetailsBody item={item.data} onChange={item.reload} />}
+        {item.data && <DetailsBody item={item.data} />}
       </article>
     </div>
   );
 }
 
-function DetailsBody({ item, onChange }: { item: Item; onChange: () => void }) {
+function DetailsBody({ item }: { item: Item }) {
   const api = useApi();
   const nav = useNavigate();
   const toast = useToast();
@@ -67,15 +69,17 @@ function DetailsBody({ item, onChange }: { item: Item; onChange: () => void }) {
   const playTarget = isSeries ? nextEp?.Id ?? episodes.data?.[0]?.Id : item.Id;
   const resumable = isSeries ? (nextEp?.UserData?.PlayedPercentage ?? 0) > 0 : (item.UserData?.PlayedPercentage ?? 0) > 0;
 
+  const menu = useItemMenu();
+  const heroMenu = useMenuTrigger(item);
   const toggleFav = async () => {
     await api.setFavorite(item.Id, !fav);
     toast(fav ? 'Removed from My List' : 'Added to My List');
-    onChange();
+    publishItem(await api.item(item.Id));
   };
   const toggleWatched = async () => {
     await api.markPlayed(item.Id, !played);
     toast(played ? 'Marked as unwatched' : 'Marked as watched');
-    onChange();
+    publishItem(await api.item(item.Id));
   };
 
   const cast = (item.People ?? []).filter((p) => p.Type === 'Actor');
@@ -87,7 +91,7 @@ function DetailsBody({ item, onChange }: { item: Item; onChange: () => void }) {
 
   return (
     <>
-      <section className="details-hero">
+      <section className="details-hero" {...heroMenu}>
         <Art item={item} kind="Backdrop" width={1280} />
         <div className="details-hero-shade" aria-hidden="true" />
         <div className="details-hero-copy">
@@ -103,6 +107,11 @@ function DetailsBody({ item, onChange }: { item: Item; onChange: () => void }) {
             {!isSeries && (
               <button className={`circle-btn${played ? ' on' : ''}`} aria-pressed={played} aria-label={played ? 'Mark as unwatched' : 'Mark as watched'} title={played ? 'Mark as unwatched' : 'Mark as watched'} onClick={toggleWatched}>
                 <Icon.check />
+              </button>
+            )}
+            {api.isAdmin && menu && (
+              <button className="circle-btn" aria-label="Edit artwork" title="Edit artwork" onClick={() => menu.editArtwork(item, 'Backdrop')}>
+                <Icon.image />
               </button>
             )}
           </div>
@@ -157,21 +166,7 @@ function DetailsBody({ item, onChange }: { item: Item; onChange: () => void }) {
           <ol className="episode-list">
             {episodes.data?.map((e) => (
               <li key={e.Id}>
-                <button className={`episode-row${e.Id === nextEp?.Id ? ' current' : ''}`} onClick={() => nav(`/play/${e.Id}`)}>
-                  <span className="ep-num">{e.IndexNumber}</span>
-                  <span className="ep-thumb">
-                    <Art item={e} kind="Thumb" width={320} />
-                    <span className="ep-play" aria-hidden="true"><Icon.play /></span>
-                    {e.UserData?.PlayedPercentage ? <span className="ep-progress"><span style={{ width: `${e.UserData.PlayedPercentage}%` }} /></span> : null}
-                  </span>
-                  <span className="ep-text">
-                    <span className="ep-head">
-                      <span className="ep-title">{e.Name}</span>
-                      <span className="ep-time">{e.RunTimeTicks ? `${Math.round(e.RunTimeTicks / 6e8)}m` : ''}</span>
-                    </span>
-                    {e.Overview && <span className="ep-overview">{e.Overview}</span>}
-                  </span>
-                </button>
+                <EpisodeRow e={e} current={e.Id === nextEp?.Id} onPlay={() => nav(`/play/${e.Id}`)} />
               </li>
             ))}
           </ol>
@@ -206,10 +201,35 @@ function DetailsBody({ item, onChange }: { item: Item; onChange: () => void }) {
   );
 }
 
+function EpisodeRow({ e: given, current, onPlay }: { e: Item; current: boolean; onPlay: () => void }) {
+  const e = useLiveItem(given);
+  const menu = useMenuTrigger(e);
+  return (
+    <button className={`episode-row${current ? ' current' : ''}`} onClick={onPlay} {...menu}>
+      <span className="ep-num">{e.IndexNumber}</span>
+      <span className="ep-thumb">
+        <Art item={e} kind="Thumb" width={320} />
+        <span className="ep-play" aria-hidden="true"><Icon.play /></span>
+        {e.UserData?.PlayedPercentage ? <span className="ep-progress"><span style={{ width: `${e.UserData.PlayedPercentage}%` }} /></span> : null}
+        {e.UserData?.Played && <span className="tile-watched" title="Watched"><Icon.check /></span>}
+      </span>
+      <span className="ep-text">
+        <span className="ep-head">
+          <span className="ep-title">{e.Name}</span>
+          <span className="ep-time">{e.RunTimeTicks ? `${Math.round(e.RunTimeTicks / 6e8)}m` : ''}</span>
+        </span>
+        {e.Overview && <span className="ep-overview">{e.Overview}</span>}
+      </span>
+    </button>
+  );
+}
+
 /** Figma: More Like This card: art with runtime, rating/year/+ row, overview. */
-function SimilarCard({ item }: { item: Item }) {
+function SimilarCard({ item: given }: { item: Item }) {
   const api = useApi();
   const link = useDetailsLink();
+  const item = useLiveItem(given);
+  const menu = useMenuTrigger(item);
   const toast = useToast();
   const [fav, setFav] = useState(!!item.UserData?.IsFavorite);
   const toggle = async (e: React.MouseEvent) => {
@@ -219,7 +239,7 @@ function SimilarCard({ item }: { item: Item }) {
     toast(fav ? 'Removed from My List' : 'Added to My List');
   };
   return (
-    <Link className="similar-card" {...link(item)} replace>
+    <Link className="similar-card" {...link(item)} {...menu} replace>
       <span className="similar-art">
         <Art item={item} kind="Thumb" width={400} />
         {item.RunTimeTicks ? <span className="similar-time">{hm(item.RunTimeTicks)}</span> : null}

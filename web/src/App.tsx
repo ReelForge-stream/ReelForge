@@ -11,6 +11,7 @@ import Home from './pages/Home';
 import Library from './pages/Library';
 import MyList from './pages/MyList';
 import Details from './pages/Details';
+import { ItemMenuHost } from './lib/itemMenu';
 import Search from './pages/Search';
 import ManagerLayout from './manager/ManagerLayout';
 import ManagerOverview from './manager/Overview';
@@ -95,7 +96,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
   const pageLocation = background ?? (isItem ? ({ ...location, pathname: '/' } as Location) : location);
 
   return (
-    <>
+    <ItemMenuHost>
       <Routes location={pageLocation}>
         <Route path="/play/:id" element={<Suspense fallback={<div className="player" />}><Player /></Suspense>} />
         <Route element={<Shell onSignOut={onSignOut} />}>
@@ -132,7 +133,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
           <Route path="/item/:id" element={<Details hasBackground={!!background} />} />
         </Routes>
       )}
-    </>
+    </ItemMenuHost>
   );
 }
 

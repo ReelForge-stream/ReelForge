@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Link, useLocation } from 'react-router-dom';
 import type { Api } from './api';
 import type { User } from './types';
+import { useLiveItem, useMenuTrigger } from './itemMenu';
 import type { Item } from './types';
 
 // ---------- app context ----------
@@ -190,6 +191,11 @@ export const Icon = {
   exitFullscreen: () => (<svg viewBox="0 0 24 24" {...S}><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg>),
   subtitles: () => (<svg viewBox="0 0 24 24" {...S}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 13h4M13 13h4M7 16h7" /></svg>),
   next: () => (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5.5v13a1 1 0 0 0 1.5.86l9.4-6.5a1 1 0 0 0 0-1.72L6.5 4.64A1 1 0 0 0 5 5.5z" /><rect x="17" y="5" width="2.5" height="14" rx="1" /></svg>),
+  image: () => (<svg viewBox="0 0 24 24" {...S}><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="9" cy="9.5" r="1.8" /><path d="m4 17.5 5-5 4 4 2.5-2.5 4.5 4.5" /></svg>),
+  refresh: () => (<svg viewBox="0 0 24 24" {...S}><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" /><path d="M19.5 4v4h-4" /></svg>),
+  more: () => (<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="18" cy="12" r="1.8" /></svg>),
+  upload: () => (<svg viewBox="0 0 24 24" {...S}><path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9M5 15v3.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V15" /></svg>),
+  trash: () => (<svg viewBox="0 0 24 24" {...S}><path d="M5 7h14M10 7V5h4v2M7 7l1 12.5h8L17 7" /></svg>),
   episodes: () => (<svg viewBox="0 0 24 24" {...S}><rect x="3" y="7" width="14" height="12" rx="1.5" /><path d="M7 4h13a1 1 0 0 1 1 1v11" /></svg>),
 };
 
@@ -208,16 +214,18 @@ export function useDetailsLink() {
   return (i: Item) => ({ to: itemLink(i), state: i.Type === 'Episode' || i.Type === 'CollectionFolder' ? undefined : { background: bg } });
 }
 
-export function Tile({ item, progress = true }: { item: Item; progress?: boolean }) {
+export function Tile({ item: given, progress = true }: { item: Item; progress?: boolean }) {
   const api = useApi();
   const link = useDetailsLink();
+  const item = useLiveItem(given);
+  const menu = useMenuTrigger(item);
   const pct = item.UserData?.PlayedPercentage;
   const hasThumb = !!item.ImageTags?.Thumb || (!!item.ParentThumbImageTag && item.Type !== 'Episode');
   const logo = hasThumb ? undefined : api.image(item, 'Logo', 300);
   const label = isRecent(item) && !item.UserData?.Played ? (item.Type === 'Series' ? 'New episodes' : 'Recently added') : null;
   const title = item.Type === 'Episode' ? `${item.SeriesName ?? ''}` : item.Name;
   return (
-    <Link {...link(item)} className="tile" aria-label={item.Type === 'Episode' ? `${item.SeriesName} ${epCode(item)} ${item.Name}` : item.Name}>
+    <Link {...link(item)} {...menu} className="tile" aria-label={item.Type === 'Episode' ? `${item.SeriesName} ${epCode(item)} ${item.Name}` : item.Name}>
       <div className="tile-frame">
         <Art item={item} kind="Thumb" width={480} bare={!hasThumb} />
         {!hasThumb && (
@@ -239,10 +247,12 @@ export function Tile({ item, progress = true }: { item: Item; progress?: boolean
 }
 
 /** Ranked row tile: an outlined numeral beside a poster (Figma: Top 10 row). */
-export function RankTile({ item, rank }: { item: Item; rank: number }) {
+export function RankTile({ item: given, rank }: { item: Item; rank: number }) {
   const link = useDetailsLink();
+  const item = useLiveItem(given);
+  const menu = useMenuTrigger(item);
   return (
-    <Link {...link(item)} className="rank-tile" aria-label={`${rank}. ${item.Name}`}>
+    <Link {...link(item)} {...menu} className="rank-tile" aria-label={`${rank}. ${item.Name}`}>
       <span className="rank-num" aria-hidden="true">{rank}</span>
       <div className="rank-poster">
         <Art item={item} kind="Primary" width={240} />

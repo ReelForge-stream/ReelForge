@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Item } from '../lib/types';
+import { useLiveItem, useMenuTrigger } from '../lib/itemMenu';
 import { Art, Icon, RankTile, Tile, epCode, useApi, useAsync, useDetailsLink, usePoll } from '../lib/ui';
 
 const PREFERRED_GENRES = ['Action', 'Comedy', 'Drama', 'Animation', 'Thriller', 'Science Fiction', 'Family', 'Documentary', 'Crime', 'Horror', 'Adventure', 'Romance'];
@@ -106,8 +107,10 @@ function Row({ title, more, ranked, children }: { title: string; more?: string; 
 }
 
 /** Figma: Hero image + TitlePreview (99:3471) + Rating flag (106:3708). */
-function Billboard({ item }: { item: Item }) {
+function Billboard({ item: given }: { item: Item }) {
   const api = useApi();
+  const item = useLiveItem(given);
+  const menu = useMenuTrigger(item);
   const nav = useNavigate();
   const link = useDetailsLink();
   const isEp = item.Type === 'Episode';
@@ -117,7 +120,7 @@ function Billboard({ item }: { item: Item }) {
   const title = isEp ? item.SeriesName ?? item.Name : item.Name;
 
   return (
-    <section className="billboard">
+    <section className="billboard" {...menu}>
       <div className="billboard-art">
         <Art item={item} kind="Backdrop" width={1920} />
       </div>
