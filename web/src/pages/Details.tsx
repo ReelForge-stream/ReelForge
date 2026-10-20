@@ -24,7 +24,11 @@ export default function Details({ hasBackground }: { hasBackground: boolean }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => panel.current?.scrollTo({ top: 0 }), [id]);
+  // Braces matter: an effect must return nothing or a cleanup function, and some browser
+  // extensions make scrollTo() return a value, which crashed the page when the panel closed.
+  useEffect(() => {
+    if (panel.current) panel.current.scrollTop = 0;
+  }, [id]);
 
   return (
     <div className="details-back" ref={panel} onClick={close}>

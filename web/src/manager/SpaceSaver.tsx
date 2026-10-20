@@ -17,7 +17,9 @@ export default function SpaceSaver() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => setSelected(new Set()), [scan.data]);
+  useEffect(() => {
+    setSelected(new Set());
+  }, [scan.data]);
 
   if (scan.error) return <div className="err-box">Couldn’t scan the library: {scan.error}</div>;
   const r = scan.data;

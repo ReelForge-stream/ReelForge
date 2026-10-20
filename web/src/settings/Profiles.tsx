@@ -80,7 +80,9 @@ function NewProfile({ onDone }: { onDone: (id?: string) => void }) {
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => input.current?.focus(), []);
+  useEffect(() => {
+    input.current?.focus();
+  }, []);
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -143,7 +145,9 @@ function ProfileEditor({ user, isMe, libraries, ratings, onChange, onDeleted }: 
   }, [ratings]);
 
   // After a save the list reloads; take the server's copy as the new starting point.
-  useEffect(() => setPolicy(user.Policy), [user.Policy]);
+  useEffect(() => {
+    setPolicy(user.Policy);
+  }, [user.Policy]);
   const policyDirty = JSON.stringify(policy) !== JSON.stringify(user.Policy);
   const set = <K extends keyof UserPolicy>(k: K, v: UserPolicy[K]) => setPolicy((p) => ({ ...p, [k]: v }));
 

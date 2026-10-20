@@ -107,7 +107,9 @@ function PasswordPrompt({ user, server, onBack, onSignedIn }: { user: User; serv
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => input.current?.focus(), []);
+  useEffect(() => {
+    input.current?.focus();
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

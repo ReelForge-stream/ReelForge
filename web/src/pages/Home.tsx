@@ -76,7 +76,9 @@ function Row({ title, more, ranked, children }: { title: string; more?: string; 
     if (!el) return;
     setEdges({ start: el.scrollLeft < 4, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4 });
   };
-  useEffect(update, [children]);
+  useEffect(() => {
+    update();
+  }, [children]);
   const page = (dir: 1 | -1) => strip.current?.scrollBy({ left: dir * strip.current.clientWidth * 0.9, behavior: 'smooth' });
 
   return (
