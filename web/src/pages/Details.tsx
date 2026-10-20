@@ -18,7 +18,8 @@ export default function Details({ hasBackground }: { hasBackground: boolean }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    // Escape closes the panel, unless a menu or editor is open on top of it (that closes first).
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.item-menu, .art-dialog') && close();
     window.addEventListener('keydown', esc);
     return () => {
       document.body.style.overflow = prev;
@@ -109,9 +110,17 @@ function DetailsBody({ item }: { item: Item }) {
                 <Icon.check />
               </button>
             )}
-            {api.isAdmin && menu && (
-              <button className="circle-btn" aria-label="Edit artwork" title="Edit artwork" onClick={() => menu.editArtwork(item, 'Backdrop')}>
-                <Icon.image />
+            {menu && (
+              <button
+                className="circle-btn"
+                aria-label="More options"
+                title={api.isAdmin ? 'More: edit info, fix match, artwork' : 'More options'}
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  menu.open(item, r.left, r.bottom + 6);
+                }}
+              >
+                <Icon.more />
               </button>
             )}
           </div>

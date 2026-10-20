@@ -900,3 +900,32 @@ code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-siz
   .art-frame.tall { max-width: 160px; }
   .art-grid { max-height: none; }
 }
+
+/* ---------- edit info / fix match ---------- */
+
+.art-dialog.narrow { width: min(640px, 100%); }
+.meta-form { display: grid; gap: 16px; padding: 18px 24px 24px; }
+.meta-form .field-row { align-items: start; }
+.meta-loading { padding: 18px 24px 28px; }
+.match-search .input { width: 100%; min-width: 0; }
+.input.area.plain { font-family: var(--text); font-size: 0.95rem; }
+.meta-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.match-body { display: grid; gap: 14px; padding: 12px 24px 24px; }
+.match-body a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.match-search { display: grid; grid-template-columns: minmax(0, 2fr) 90px minmax(0, 1.2fr) auto; gap: 10px; align-items: end; }
+.match-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: min(56vh, 620px); overflow-y: auto; }
+.match-list li { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px; border-radius: var(--radius-sm); background: var(--surface); }
+.match-list li:hover { background: var(--surface-2); }
+.match-poster { width: 64px; aspect-ratio: 2 / 3; border-radius: 3px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; color: var(--muted); }
+.match-poster img { width: 100%; height: 100%; object-fit: cover; }
+.match-poster svg { width: 24px; height: 24px; }
+.match-text { display: grid; gap: 3px; min-width: 0; }
+.match-text strong { font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.match-overview { font-size: 13px; color: #C3CDD6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 640px) {
+  .match-search { grid-template-columns: 1fr 90px; }
+  .match-search .field:nth-child(3) { grid-column: 1 / -1; }
+  .match-list li { grid-template-columns: 52px minmax(0, 1fr); }
+  .match-list li .btn { grid-column: 2; justify-self: start; }
+  .match-poster { width: 52px; }
+}

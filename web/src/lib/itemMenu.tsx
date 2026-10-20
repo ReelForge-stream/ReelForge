@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent, type ReactNode, type TouchEvent as RTouchEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { EditInfoDialog, FixMatchDialog } from './metaDialogs';
 import type { ImageKind, RemoteImage } from './api';
 import type { Item } from './types';
 import { Art, Icon, useApi, useToast } from './ui';
@@ -98,31 +99,37 @@ export function useMenuTrigger(item: Item) {
 
 type Open = { item: Item; x: number; y: number } | null;
 
+type Dialog = { kind: 'art'; item: Item; image?: ImageKind } | { kind: 'info' | 'match'; item: Item } | null;
+
 export function ItemMenuHost({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<Open>(null);
-  const [art, setArt] = useState<{ item: Item; kind?: ImageKind } | null>(null);
+  const [dialog, setDialog] = useState<Dialog>(null);
   const value = useMemo<MenuApi>(
     () => ({
       open: (item, x, y) => setOpen({ item, x, y }),
-      editArtwork: (item, kind) => {
+      editArtwork: (item, image) => {
         setOpen(null);
-        setArt({ item, kind });
+        setDialog({ kind: 'art', item, image });
       },
     }),
     [],
   );
+  const close = useCallback(() => setDialog(null), []);
   return (
     <MenuContext.Provider value={value}>
       {children}
-      {open && <ItemMenu {...open} onClose={() => setOpen(null)} onArtwork={(k) => value.editArtwork(open.item, k)} />}
-      {art && <ArtworkDialog item={art.item} initial={art.kind} onClose={() => setArt(null)} />}
+      {open && <ItemMenu {...open} onClose={() => setOpen(null)} onDialog={(d) => { setOpen(null); setDialog(d); }} />}
+      {dialog?.kind === 'art' && <ArtworkDialog item={dialog.item} initial={dialog.image} onClose={close} />}
+      {dialog?.kind === 'info' && <EditInfoDialog item={dialog.item} onClose={close} />}
+      {dialog?.kind === 'match' && <FixMatchDialog item={dialog.item} onClose={close} />}
     </MenuContext.Provider>
   );
 }
 
-function ItemMenu({ item: shown, x, y, onClose, onArtwork }: { item: Item; x: number; y: number; onClose: () => void; onArtwork: (k?: ImageKind) => void }) {
+function ItemMenu({ item: shown, x, y, onClose, onDialog }: { item: Item; x: number; y: number; onClose: () => void; onDialog: (d: Dialog) => void }) {
   const api = useApi();
   const nav = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
@@ -149,7 +156,10 @@ function ItemMenu({ item: shown, x, y, onClose, onArtwork }: { item: Item; x: nu
     const key = (e: KeyboardEvent) => {
       const items = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
       const i = items.indexOf(document.activeElement as HTMLButtonElement);
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
       else if (e.key === 'ArrowDown') {
         e.preventDefault();
         items[(i + 1) % items.length]?.focus();
@@ -190,6 +200,12 @@ function ItemMenu({ item: shown, x, y, onClose, onArtwork }: { item: Item; x: nu
     onClose();
     nav(to);
   };
+  // Open More Info over the page you're on (Movies, TV, Search...), not over Home.
+  const details = (id: string) => {
+    onClose();
+    const bg = (location.state as { background?: unknown } | null)?.background ?? location;
+    nav(`/item/${id}`, { state: { background: bg } });
+  };
 
   return (
     <div className="item-menu" ref={ref} role="menu" aria-label={`${title}: options`} style={pos} onContextMenu={(e) => e.preventDefault()}>
@@ -207,12 +223,12 @@ function ItemMenu({ item: shown, x, y, onClose, onArtwork }: { item: Item; x: nu
         </button>
       )}
       {item.Type === 'Episode' && item.SeriesId ? (
-        <button role="menuitem" onClick={() => go(`/item/${item.SeriesId}`)}>
+        <button role="menuitem" onClick={() => details(item.SeriesId!)}>
           <Icon.tv />
           Go to show
         </button>
       ) : (
-        <button role="menuitem" onClick={() => go(`/item/${item.Id}`)}>
+        <button role="menuitem" onClick={() => details(item.Id)}>
           <Icon.info />
           More info
         </button>
@@ -228,7 +244,17 @@ function ItemMenu({ item: shown, x, y, onClose, onArtwork }: { item: Item; x: nu
       {api.isAdmin && (
         <>
           <div className="im-sep" role="separator" />
-          <button role="menuitem" onClick={() => onArtwork(item.Type === 'Episode' ? 'Primary' : 'Thumb')}>
+          <button role="menuitem" onClick={() => onDialog({ kind: 'info', item })}>
+            <Icon.pencil />
+            Edit info…
+          </button>
+          {(item.Type === 'Movie' || item.Type === 'Series') && (
+            <button role="menuitem" onClick={() => onDialog({ kind: 'match', item })}>
+              <Icon.search />
+              Fix match…
+            </button>
+          )}
+          <button role="menuitem" onClick={() => onDialog({ kind: 'art', item, image: item.Type === 'Episode' ? 'Primary' : 'Thumb' })}>
             <Icon.image />
             Edit artwork…
           </button>

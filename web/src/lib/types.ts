@@ -48,6 +48,11 @@ export interface MediaSource {
 }
 
 export interface Item {
+  ProviderIds?: Record<string, string>;
+  OriginalTitle?: string;
+  LockedFields?: string[];
+  SortName?: string;
+  ForcedSortName?: string;
   Id: string;
   Name: string;
   Type: string;

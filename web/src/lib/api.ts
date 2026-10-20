@@ -330,6 +330,31 @@ export class Api {
       ),
   };
 
+  // ---------- Title info and matching (administrators) ----------
+
+  meta = {
+    /** Change a title's details. The server replaces the whole record, so start from the full copy. */
+    update: async (id: string, patch: Record<string, unknown>, lock: string[]) => {
+      const full = await this.get<Record<string, unknown>>(`/Items/${id}?userId=${this.userId}`);
+      const locked = new Set([...((full.LockedFields as string[] | undefined) ?? []), ...lock]);
+      return this.post(`/Items/${id}`, { ...full, ...patch, LockedFields: [...locked] });
+    },
+    unlock: async (id: string, fields: string[]) => {
+      const full = await this.get<Record<string, unknown>>(`/Items/${id}?userId=${this.userId}`);
+      const locked = ((full.LockedFields as string[] | undefined) ?? []).filter((f) => !fields.includes(f));
+      return this.post(`/Items/${id}`, { ...full, LockedFields: locked });
+    },
+    /** Look a title up in the online databases (TheMovieDb, OMDb, ...). */
+    search: (type: 'Movie' | 'Series', itemId: string, q: { name: string; year?: number; providerIds?: Record<string, string> }) =>
+      this.post<MatchResult[]>(`/Items/RemoteSearch/${type}`, {
+        ItemId: itemId,
+        SearchInfo: { Name: q.name, Year: q.year, ProviderIds: q.providerIds ?? {} },
+      }),
+    /** Re-match a title to a search result; info and artwork are re-downloaded. */
+    apply: (itemId: string, result: MatchResult, replaceImages: boolean) =>
+      this.post(`/Items/RemoteSearch/Apply/${itemId}?replaceAllImages=${replaceImages}`, result),
+  };
+
   /** Image URL for a specific image type and tag (used by the artwork editor). */
   imageUrl(id: string, type: ImageKind, tag: string, width: number, index = 0): string | undefined {
     if (isDemo) return undefined;
@@ -426,6 +451,17 @@ export class Api {
     enableStreamingGpu: () => this.post('/ReelForge/Gpu/EnableStreamingAcceleration'),
     refreshGpu: () => this.post('/ReelForge/Gpu/Refresh'),
   };
+}
+
+export interface MatchResult {
+  Name: string;
+  ProductionYear?: number;
+  PremiereDate?: string;
+  ImageUrl?: string;
+  SearchProviderName?: string;
+  Overview?: string;
+  ProviderIds?: Record<string, string>;
+  [k: string]: unknown;
 }
 
 export type ImageKind = 'Primary' | 'Thumb' | 'Backdrop' | 'Logo';

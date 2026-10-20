@@ -334,6 +334,26 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     const id = p.split('/')[2];
     return { Items: episodes(id, Number(q.get('seasonId')?.split('-').pop() ?? 1)).map(withUser) };
   }
+  // Edit info / fix match
+  if (p.startsWith('/Items/RemoteSearch/Apply/')) {
+    const it = all.find((x) => x.Id === p.split('/')[4]);
+    if (it) Object.assign(it, { Name: (body as { Name: string }).Name, ProductionYear: (body as { ProductionYear?: number }).ProductionYear });
+    return undefined;
+  }
+  if (p.startsWith('/Items/RemoteSearch/')) {
+    const n = ((body as { SearchInfo: { Name: string } }).SearchInfo.Name || 'Title').trim();
+    return [0, 1, 2, 3].map((i) => ({
+      Name: i === 0 ? n : i === 1 ? `${n}: Director’s Cut` : i === 2 ? `The ${n}` : `${n} II`,
+      ProductionYear: [2016, 2016, 1998, 2021][i], SearchProviderName: 'TheMovieDb',
+      ProviderIds: { Tmdb: String(1000 + i * 37), ...(i < 2 ? { Imdb: `tt0${4410000 + i}` } : {}) },
+      Overview: ['An architect suspects the house she designed is watching her family.', 'The extended cut with twelve minutes of new footage.', 'A different film entirely, made decades earlier.', 'The sequel nobody asked for.'][i],
+    }));
+  }
+  if (p.startsWith('/Items/') && method === 'POST' && p.split('/').length === 3) {
+    const it = all.find((x) => x.Id === p.split('/')[2]);
+    if (it) Object.assign(it, { Name: (body as Item).Name, Overview: (body as Item).Overview, ProductionYear: (body as Item).ProductionYear ?? undefined, LockedFields: (body as Item).LockedFields });
+    return undefined;
+  }
   // Artwork editor
   if (p.startsWith('/Items/') && p.endsWith('/Images') && method === 'GET') return [{ ImageType: 'Primary', ImageTag: 'x', Width: 1000, Height: 1500 }];
   if (p.startsWith('/Items/') && p.endsWith('/RemoteImages')) {
@@ -346,7 +366,7 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   if (p.startsWith('/Items/')) {
     const id = p.split('/')[2];
     const found = all.find((x) => x.Id === id);
-    if (found) return { ...withUser(found), People: people, MediaStreams: [{ Type: 'Video', Height: found.Id === 'm3' ? 2160 : 1080 }] };
+    if (found) return { ...withUser(found), ProviderIds: { Tmdb: '1000', Imdb: 'tt04410000' }, People: people, MediaStreams: [{ Type: 'Video', Height: found.Id === 'm3' ? 2160 : 1080 }] };
     const [sid, sn, en] = id.split('-');
     return withUser(episodes(sid, Number(sn))[Number(en) - 1]);
   }
