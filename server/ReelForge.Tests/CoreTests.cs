@@ -1,0 +1,472 @@
+using ReelForge.Core;
+using ReelForge.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace ReelForge.Tests;
+
+internal static class Make
+{
+    private static readonly TimeSpan TwoHours = TimeSpan.FromHours(2);
+
+    public static MediaFile Movie(
+        string path,
+        string codec = "h264",
+        int width = 1920,
+        int height = 1080,
+        double videoMbps = 10,
+        long? size = null,
+        string? tmdb = "27205",
+        string title = "Inception",
+        int year = 2010,
+        DynamicRange range = DynamicRange.Sdr,
+        int bitDepth = 8,
+        TimeSpan? duration = null,
+        int channels = 6)
+    {
+        var d = duration ?? TwoHours;
+        long vbr = (long)(videoMbps * 1_000_000);
+        long audio = 640_000;
+        return new MediaFile
+        {
+            ItemId = Guid.NewGuid(),
+            MediaSourceId = Guid.NewGuid().ToString("N"),
+            Kind = MediaKind.Movie,
+            Title = $"{title} ({year})",
+            Year = year,
+            ProviderIds = tmdb is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["Tmdb"] = tmdb },
+            Path = path,
+            Container = Path.GetExtension(path).TrimStart('.'),
+            SizeBytes = size ?? (long)((vbr + audio) * d.TotalSeconds / 8),
+            DurationTicks = d.Ticks,
+            VideoCodec = codec,
+            VideoStreamIndex = 0,
+            Width = width,
+            Height = height,
+            BitDepth = bitDepth,
+            FrameRate = 23.976,
+            Range = range,
+            VideoBitrate = vbr,
+            TotalBitrate = vbr + audio,
+            AudioTracks = [new AudioTrack("ac3", channels, audio, "eng")],
+            SubtitleTracks = [new SubtitleTrack("subrip", "eng", false)],
+        };
+    }
+
+    public static MediaFile Episode(string path, int season, int episode, int? end = null, string tvdb = "371980", string codec = "h264")
+    {
+        var m = Movie(path, codec: codec, tmdb: null, duration: TimeSpan.FromMinutes(50));
+        return m with
+        {
+            Kind = MediaKind.Episode,
+            Title = $"Severance S{season:00}E{episode:00}",
+            SeriesName = "Severance",
+            SeriesId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            SeasonNumber = season,
+            EpisodeNumber = episode,
+            EpisodeNumberEnd = end,
+            ProviderIds = new Dictionary<string, string> { ["Tvdb"] = tvdb },
+        };
+    }
+}
+
+public class DuplicateFinderTests
+{
+    [Fact]
+    public void Keeps_higher_quality_copy_and_reports_reclaimable_space()
+    {
+        var best = Make.Movie(@"D:\Movies\Inception (2010)\Inception (2010) - 1080p.mkv", codec: "hevc", videoMbps: 8);
+        var worse = Make.Movie(@"E:\Old\Inception.2010.720p.mp4", width: 1280, height: 720, videoMbps: 4);
+
+        var groups = DuplicateFinder.Find([worse, best]);
+
+        var g = Assert.Single(groups);
+        Assert.Equal(best.Path, g.Files[0].File.Path);
+        Assert.True(g.Files[0].RecommendedKeep);
+        Assert.False(g.Files[1].RecommendedKeep);
+        Assert.Equal(worse.SizeBytes, g.ReclaimableBytes);
+    }
+
+    [Fact]
+    public void Same_file_reported_twice_is_not_a_duplicate()
+    {
+        var a = Make.Movie(@"D:\Movies\Inception.mkv");
+        var sameFileOtherSlashes = a with { MediaSourceId = "other", Path = "D:/Movies/Inception.mkv" };
+        Assert.Empty(DuplicateFinder.Find([a, sameFileOtherSlashes]));
+    }
+
+    [Fact]
+    public void Different_editions_are_flagged_and_nothing_is_preselected()
+    {
+        var theatrical = Make.Movie(@"D:\Movies\Blade Runner (1982)\Blade Runner (1982).mkv", tmdb: "78", title: "Blade Runner", year: 1982);
+        var finalCut = Make.Movie(@"D:\Movies\Blade Runner (1982)\Blade Runner (1982) - Final Cut.mkv", tmdb: "78", title: "Blade Runner", year: 1982);
+
+        var g = Assert.Single(DuplicateFinder.Find([theatrical, finalCut]));
+
+        Assert.True(g.LooksLikeEditions);
+        Assert.All(g.Files, f => Assert.True(f.RecommendedKeep));
+        Assert.Contains(g.Files, f => f.Edition == "Final Cut");
+    }
+
+    [Theory]
+    [InlineData("Avatar (2009) - 3D.mkv", "3D")]
+    [InlineData("Avatar.2009.Half-SBS.mkv", "3D")]
+    [InlineData("Movie (2001) {edition-Extended Edition}.mkv", "Extended")]
+    [InlineData("Aliens.1986.Directors.Cut.1080p.mkv", "Director's Cut")]
+    [InlineData("Inception (2010) - 1080p.mkv", null)]
+    [InlineData("Soundtrack.of.Uncutable.Moments.mkv", null)]
+    public void Detects_editions(string fileName, string? expected)
+    {
+        Assert.Equal(expected, DuplicateFinder.DetectEdition(fileName));
+    }
+
+    [Fact]
+    public void Episodes_match_on_series_season_and_episode()
+    {
+        var e1a = Make.Episode(@"T:\TV\Severance\Season 01\Severance - S01E01.mkv", 1, 1);
+        var e1b = Make.Episode(@"T:\TV\Severance (2022)\S01\severance.s01e01.720p.mp4", 1, 1);
+        var e2 = Make.Episode(@"T:\TV\Severance\Season 01\Severance - S01E02.mkv", 1, 2);
+        var e1to2 = Make.Episode(@"T:\TV\Severance\Season 01\Severance - S01E01-E02.mkv", 1, 1, end: 2);
+        var otherShow = Make.Episode(@"T:\TV\Other\S01E01.mkv", 1, 1, tvdb: "999");
+
+        var g = Assert.Single(DuplicateFinder.Find([e1a, e1b, e2, e1to2, otherShow]));
+        Assert.Equal(2, g.Files.Count);
+        Assert.Equal(MediaKind.Episode, g.Kind);
+    }
+
+    [Fact]
+    public void Same_show_in_two_folders_matches_without_metadata_ids()
+    {
+        // Jellyfin creates a separate series item per folder, so SeriesId differs.
+        var a = Make.Episode(@"T:\TV\Show Test (2020)\Season 01\Show Test - S01E01.mkv", 1, 1) with { ProviderIds = new Dictionary<string, string>(), SeriesId = Guid.NewGuid() };
+        var b = Make.Episode(@"U:\TV2\Show Test (2020)\Season 1\show.test.s01e01.480p.mkv", 1, 1) with { ProviderIds = new Dictionary<string, string>(), SeriesId = Guid.NewGuid() };
+        var other = Make.Episode(@"T:\TV\Other Show\S01E01.mkv", 1, 1) with { ProviderIds = new Dictionary<string, string>(), SeriesName = "Other Show", SeriesId = Guid.NewGuid() };
+        var g = Assert.Single(DuplicateFinder.Find([a, b, other]));
+        Assert.Equal(2, g.Files.Count);
+    }
+
+    [Fact]
+    public void Movies_without_ids_fall_back_to_title_and_year()
+    {
+        var a = Make.Movie(@"D:\The Matrix (1999).mkv", tmdb: null, title: "The Matrix", year: 1999);
+        var b = Make.Movie(@"E:\Matrix 1999.avi", tmdb: null, title: "Matrix", year: 1999, codec: "mpeg4");
+        var remake = Make.Movie(@"E:\Matrix (2031).mkv", tmdb: null, title: "Matrix", year: 2031);
+
+        var g = Assert.Single(DuplicateFinder.Find([a, b, remake]));
+        Assert.Equal(2, g.Files.Count);
+    }
+}
+
+public class QualityScorerTests
+{
+    [Fact]
+    public void Higher_resolution_wins()
+    {
+        Assert.True(QualityScorer.Score(Make.Movie("a.mkv", width: 3840, height: 2160, videoMbps: 20))
+                    > QualityScorer.Score(Make.Movie("b.mkv", videoMbps: 30)));
+    }
+
+    [Fact]
+    public void Scope_1080p_counts_as_1080p()
+    {
+        Assert.Equal(1080, QualityScorer.ResolutionTier(1920, 800));
+        Assert.Equal(2160, QualityScorer.ResolutionTier(3840, 1600));
+    }
+
+    [Fact]
+    public void Same_bitrate_HEVC_beats_H264()
+    {
+        Assert.True(QualityScorer.Score(Make.Movie("a.mkv", codec: "hevc", videoMbps: 6))
+                    > QualityScorer.Score(Make.Movie("b.mkv", codec: "h264", videoMbps: 6)));
+    }
+
+    [Fact]
+    public void Equal_quality_keeps_the_smaller_file()
+    {
+        var big = Make.Movie(@"D:\a.mkv", size: 9_000_000_000);
+        var small = Make.Movie(@"D:\b.mkv", size: 8_000_000_000);
+        var g = Assert.Single(DuplicateFinder.Find([big, small]));
+        Assert.Equal(small.Path, g.Files[0].File.Path);
+    }
+
+    [Fact]
+    public void Describe_is_human_readable()
+    {
+        Assert.Equal("4K · HEVC 10-bit · HDR10 · 5.1",
+            QualityScorer.Describe(Make.Movie("a.mkv", codec: "hevc", width: 3840, height: 2160, bitDepth: 10, range: DynamicRange.Hdr10)));
+    }
+}
+
+public class SpaceSaverTests
+{
+    private static readonly ConversionSettings Balanced = new();
+
+    [Fact]
+    public void Big_H264_1080p_is_a_candidate_with_roughly_half_the_size()
+    {
+        var f = Make.Movie(@"D:\m.mkv", videoMbps: 12);
+        var e = SpaceSaverEstimator.Estimate(f, Balanced);
+
+        Assert.True(e.IsCandidate, e.Reason);
+        Assert.InRange(e.SavingsFraction, 0.45, 0.65);
+        Assert.Equal(4_500_000, e.TargetVideoBitrate);
+    }
+
+    [Fact]
+    public void Dolby_Vision_is_never_converted()
+    {
+        var f = Make.Movie(@"D:\dv.mkv", codec: "hevc", width: 3840, height: 2160, videoMbps: 60, range: DynamicRange.DolbyVision, bitDepth: 10);
+        var e = SpaceSaverEstimator.Estimate(f, Balanced with { IncludeHdr = true });
+        Assert.False(e.IsCandidate);
+        Assert.Contains("Dolby Vision", e.Reason);
+    }
+
+    [Fact]
+    public void HDR_needs_opt_in()
+    {
+        var f = Make.Movie(@"D:\hdr.mkv", codec: "hevc", width: 3840, height: 2160, videoMbps: 50, range: DynamicRange.Hdr10, bitDepth: 10);
+        Assert.False(SpaceSaverEstimator.Estimate(f, Balanced).IsCandidate);
+        Assert.True(SpaceSaverEstimator.Estimate(f, Balanced with { IncludeHdr = true }).IsCandidate);
+    }
+
+    [Fact]
+    public void Already_lean_HEVC_is_left_alone()
+    {
+        var f = Make.Movie(@"D:\lean.mkv", codec: "hevc", videoMbps: 4);
+        var e = SpaceSaverEstimator.Estimate(f, Balanced);
+        Assert.False(e.IsCandidate);
+        Assert.Equal("Already efficiently encoded", e.Reason);
+    }
+
+    [Fact]
+    public void Small_savings_are_not_worth_it()
+    {
+        var f = Make.Movie(@"D:\short.mkv", videoMbps: 2, duration: TimeSpan.FromMinutes(22), width: 1280, height: 720);
+        Assert.False(SpaceSaverEstimator.Estimate(f, Balanced).IsCandidate);
+    }
+
+    [Fact]
+    public void Disc_images_are_skipped()
+    {
+        var f = Make.Movie(@"D:\disc.iso", codec: "mpeg2video", videoMbps: 30) with { IsPlainFile = false };
+        Assert.False(SpaceSaverEstimator.Estimate(f, Balanced).IsCandidate);
+    }
+
+    [Fact]
+    public void Presets_scale_the_target()
+    {
+        var f = Make.Movie(@"D:\m.mkv");
+        long max = SpaceSaverEstimator.TargetBitrate(f, Balanced with { Preset = QualityPreset.MaxSavings });
+        long bal = SpaceSaverEstimator.TargetBitrate(f, Balanced);
+        long hq = SpaceSaverEstimator.TargetBitrate(f, Balanced with { Preset = QualityPreset.HighQuality });
+        Assert.True(max < bal && bal < hq);
+    }
+}
+
+public class FfmpegArgsTests
+{
+    private static string Joined(IReadOnlyList<string> a) => string.Join(' ', a);
+
+    [Fact]
+    public void Nvenc_command_copies_audio_and_subs_and_writes_matroska()
+    {
+        var f = Make.Movie(@"D:\m.mp4") with
+        {
+            VideoStreamIndex = 2,
+            SubtitleTracks = [new SubtitleTrack("subrip", "eng", false), new SubtitleTrack("mov_text", "spa", false), new SubtitleTrack("subrip", "fre", false, IsExternal: true)],
+        };
+        var args = FfmpegArgs.Build(f, new ConversionSettings(), new EncoderChoice("hevc_nvenc", true), 4_500_000, @"D:\m.reelforge-tmp");
+        string s = Joined(args);
+
+        Assert.Contains("-hwaccel cuda", s);
+        Assert.Contains("-map 0:2", s);
+        Assert.Contains("-c:v hevc_nvenc", s);
+        Assert.Contains("-profile:v main -pix_fmt yuv420p", s);
+        Assert.Contains("-maxrate 6750k", s);
+        Assert.Contains("-c:a copy", s);
+        Assert.Contains("-c:s:1 srt", s); // mov_text can't go into MKV
+        Assert.DoesNotContain("-c:s:2", s); // external subtitle stays a separate file
+        Assert.DoesNotContain("0:t?", s); // MP4 has no attachments
+        Assert.Equal(@"D:\m.reelforge-tmp", args[^1]);
+        Assert.Equal("matroska", args[^2]);
+        Assert.True(args.ToList().IndexOf("-hwaccel") < args.ToList().IndexOf("-i"));
+    }
+
+    [Fact]
+    public void Hdr_keeps_10bit_and_colour_tags()
+    {
+        var f = Make.Movie(@"D:\hdr.mkv", codec: "hevc", width: 3840, height: 2160, bitDepth: 10, range: DynamicRange.Hdr10) with
+        {
+            ColorPrimaries = "bt2020",
+            ColorTransfer = "smpte2084",
+            ColorSpace = "bt2020nc",
+        };
+        string s = Joined(FfmpegArgs.Build(f, new ConversionSettings { IncludeHdr = true }, new EncoderChoice("hevc_nvenc", true), 16_000_000, "out"));
+        Assert.Contains("-profile:v main10 -pix_fmt p010le", s);
+        Assert.Contains("-color_primaries bt2020 -color_trc smpte2084 -colorspace bt2020nc", s);
+        Assert.Contains("-map 0:t?", s);
+    }
+
+    [Fact]
+    public void Interlaced_sources_get_deinterlaced()
+    {
+        var f = Make.Movie(@"D:\dvd.mkv", codec: "mpeg2video", width: 720, height: 480) with { IsInterlaced = true };
+        Assert.Contains("bwdif", Joined(FfmpegArgs.Build(f, new ConversionSettings(), new EncoderChoice("libx265", false), 1_100_000, "out")));
+    }
+
+    [Fact]
+    public void Encoder_choice_follows_what_actually_works()
+    {
+        var all = new HashSet<string> { "hevc_nvenc", "av1_nvenc", "libx265", "libsvtav1" };
+        Assert.Equal("hevc_nvenc", FfmpegArgs.Choose(TargetCodec.Hevc, all)!.VideoEncoder);
+        Assert.Equal("av1_nvenc", FfmpegArgs.Choose(TargetCodec.Av1, all)!.VideoEncoder);
+
+        var pascal = new HashSet<string> { "hevc_nvenc", "libx265" };
+        Assert.Null(FfmpegArgs.Choose(TargetCodec.Av1, pascal));
+
+        var noGpu = new HashSet<string> { "libx265" };
+        var cpu = FfmpegArgs.Choose(TargetCodec.Hevc, noGpu)!;
+        Assert.Equal("libx265", cpu.VideoEncoder);
+        Assert.False(cpu.UseCudaDecode);
+    }
+
+    [Fact]
+    public void Ten_bit_source_falls_back_to_cpu_when_card_lacks_10bit_hevc()
+    {
+        var report = new EncoderReport { Working = ["hevc_nvenc", "libx265"], HevcNvenc10Bit = false };
+        var tenBit = Make.Movie("a.mkv", bitDepth: 10);
+        var eightBit = Make.Movie("b.mkv");
+        Assert.Equal("libx265", EncoderProbe.ChooseFor(tenBit, new ConversionSettings(), report)!.VideoEncoder);
+        Assert.Equal("hevc_nvenc", EncoderProbe.ChooseFor(eightBit, new ConversionSettings(), report)!.VideoEncoder);
+    }
+}
+
+public class QueueHelperTests
+{
+    [Theory]
+    [InlineData("out_time_us=3600000000", 3600000000d, null)]
+    [InlineData("out_time_ms=1500000", 1500000d, null)]
+    [InlineData("speed=6.25x", null, 6.25)]
+    [InlineData("speed=N/A", null, null)]
+    [InlineData("progress=continue", null, null)]
+    public void Parses_ffmpeg_progress(string line, double? us, double? speed)
+    {
+        var (u, s) = ConversionQueue.ParseProgressLine(line);
+        Assert.Equal(us, u);
+        Assert.Equal(speed, s);
+    }
+
+    [Fact]
+    public void Verification_accepts_faithful_output_and_rejects_truncated()
+    {
+        var src = Make.Movie("a.mkv") with
+        {
+            AudioTracks = [new AudioTrack("ac3", 6, 640_000, "eng"), new AudioTrack("aac", 2, 128_000, "eng")],
+            SubtitleTracks = [new SubtitleTrack("subrip", "eng", false), new SubtitleTrack("subrip", "spa", false, true)],
+        };
+
+        const string Good = """{"streams":[{"codec_type":"video"},{"codec_type":"audio"},{"codec_type":"audio"},{"codec_type":"subtitle"}],"format":{"duration":"7199.2"}}""";
+        const string Short = """{"streams":[{"codec_type":"video"},{"codec_type":"audio"},{"codec_type":"audio"},{"codec_type":"subtitle"}],"format":{"duration":"3600.0"}}""";
+        const string LostAudio = """{"streams":[{"codec_type":"video"},{"codec_type":"audio"},{"codec_type":"subtitle"}],"format":{"duration":"7200.0"}}""";
+
+        Assert.Null(ConversionQueue.CheckProbe(src, Good));
+        Assert.Contains("length", ConversionQueue.CheckProbe(src, Short));
+        Assert.Contains("audio", ConversionQueue.CheckProbe(src, LostAudio));
+    }
+}
+
+public sealed class HoldingAreaTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "reelforge-test-" + Guid.NewGuid().ToString("N")[..8]);
+
+    public HoldingAreaTests() => Directory.CreateDirectory(Path.Combine(_root, "Movies", "Inception (2010)"));
+
+    public void Dispose() => Directory.Delete(_root, true);
+
+    private string Touch(string rel, int bytes = 1024)
+    {
+        string p = Path.Combine(_root, rel);
+        Directory.CreateDirectory(Path.GetDirectoryName(p)!);
+        File.WriteAllBytes(p, new byte[bytes]);
+        return p;
+    }
+
+    [Fact]
+    public void Remove_then_restore_round_trips_file_and_sidecars()
+    {
+        string video = Touch(Path.Combine("Movies", "Inception (2010)", "Inception (2010) - 720p.mkv"), 5000);
+        string sub = Touch(Path.Combine("Movies", "Inception (2010)", "Inception (2010) - 720p.en.srt"));
+        string keeperSub = Touch(Path.Combine("Movies", "Inception (2010)", "Inception (2010).en.srt"));
+        Touch(Path.Combine("Movies", "Inception (2010)", "Inception (2010).mkv"));
+
+        var area = new HoldingArea(NullLogger<HoldingArea>.Instance, Path.Combine(_root, "data"));
+        var held = area.Remove(video, "Inception (2010)", "Duplicate", 14, includeSidecars: true)!;
+
+        Assert.False(File.Exists(video));
+        Assert.False(File.Exists(sub));
+        Assert.True(File.Exists(keeperSub)); // belongs to the copy we kept
+        Assert.True(File.Exists(held.HeldPath));
+        Assert.Contains(".reelforge-holding", held.HeldPath);
+        Assert.Equal(5000, held.SizeBytes);
+        Assert.Single(area.List());
+
+        area.Restore(held.Id);
+        Assert.True(File.Exists(video));
+        Assert.True(File.Exists(sub));
+        Assert.Empty(area.List());
+    }
+
+    [Fact]
+    public void Holding_folder_goes_in_the_library_root_containing_the_file()
+    {
+        string lib = Path.Combine(_root, "Movies");
+        string video = Touch(Path.Combine("Movies", "Inception (2010)", "Inception.mkv"));
+        string bucket = HoldingArea.HoldingDirectoryFor(video, "abc", [Path.Combine(_root, "TV"), lib]);
+        Assert.StartsWith(Path.Combine(lib, ".reelforge-holding"), bucket);
+    }
+
+    [Fact]
+    public void Shared_basename_sidecars_stay_put()
+    {
+        string avi = Touch(Path.Combine("Movies", "Inception (2010)", "Inception.avi"));
+        Touch(Path.Combine("Movies", "Inception (2010)", "Inception.mkv"));
+        Touch(Path.Combine("Movies", "Inception (2010)", "Inception.en.srt"));
+        Assert.Empty(HoldingArea.FindExclusiveSidecars(avi));
+    }
+
+    [Fact]
+    public void Purge_deletes_permanently_and_state_survives_restart()
+    {
+        string video = Touch(Path.Combine("Movies", "x.mkv"));
+        string data = Path.Combine(_root, "data");
+        var held = new HoldingArea(NullLogger<HoldingArea>.Instance, data).Remove(video, "x", "Duplicate", 14, false)!;
+
+        var reopened = new HoldingArea(NullLogger<HoldingArea>.Instance, data);
+        Assert.Single(reopened.List());
+        reopened.Purge(held.Id);
+        Assert.False(File.Exists(held.HeldPath));
+        Assert.Empty(reopened.List());
+    }
+
+    [Fact]
+    public void Zero_day_retention_deletes_immediately()
+    {
+        string video = Touch(Path.Combine("Movies", "y.mkv"));
+        var area = new HoldingArea(NullLogger<HoldingArea>.Instance, Path.Combine(_root, "data"));
+        Assert.Null(area.Remove(video, "y", "Duplicate", 0, false));
+        Assert.False(File.Exists(video));
+        Assert.Empty(area.List());
+    }
+}
+
+public class PackagingTests
+{
+    [Fact]
+    public void Web_ui_is_embedded_in_the_module()
+    {
+        var names = typeof(ReelForge.Api.WebUiController).Assembly.GetManifestResourceNames()
+            .Select(n => n.Replace('\\', '/')).ToList();
+        Assert.Contains("ReelForgeWeb/index.html", names);
+        Assert.Contains(names, n => n.StartsWith("ReelForgeWeb/assets/", StringComparison.Ordinal) && n.EndsWith(".js", StringComparison.Ordinal));
+    }
+}

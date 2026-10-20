@@ -1,0 +1,37 @@
+<!--
+  Windows service definition for ReelForge (run by WinSW, which the installer ships as ReelForgeService.exe).
+  The engine is Jellyfin Server; all data lives in C:\ProgramData\ReelForge so it survives upgrades.
+-->
+<service>
+  <id>ReelForge</id>
+  <name>ReelForge Media Server</name>
+  <description>Streams your movies and TV to every device, finds duplicates and frees disk space.</description>
+
+  <executable>%BASE%\server\jellyfin.exe</executable>
+  <arguments>--datadir "%ProgramData%\ReelForge\data" --cachedir "%ProgramData%\ReelForge\cache" --logdir "%ProgramData%\ReelForge\logs" --webdir "%BASE%\server\jellyfin-web" --ffmpeg "%BASE%\server\ffmpeg.exe"</arguments>
+  <workingdirectory>%BASE%\server</workingdirectory>
+
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <stoptimeout>30 sec</stoptimeout>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <resetfailure>1 hour</resetfailure>
+
+  <logpath>%ProgramData%\ReelForge\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>3</keepFiles>
+  </log>
+
+  <!--
+    The service runs as LocalSystem, which can read every local drive (D:\Movies etc.).
+    If your media is on a NAS share (\\nas\media), LocalSystem can't see it: run the service as
+    your Windows account instead by uncommenting this block, or in services.msc → ReelForge → Log On.
+  <serviceaccount>
+    <username>.\YourWindowsUser</username>
+    <password>YourPassword</password>
+    <allowservicelogon>true</allowservicelogon>
+  </serviceaccount>
+  -->
+</service>

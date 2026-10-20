@@ -1,0 +1,260 @@
+// Demo mode (?demo): an invented library so the UI can be explored without a server.
+// All titles are made up; artwork is generated from colour seeds.
+import type { DupGroup, Estimate, HeldFile, Item, Job, Session, Settings, SpaceSaverResult } from './types';
+
+const T = 10_000_000; // ticks per second
+
+const movies: Item[] = [
+  ['The Lantern Keeper', 2023, 'Drama', 128, 'A lighthouse keeper on a shrinking island records the last summer before the sea takes the cottage.', 22],
+  ['Northbound Freight', 2019, 'Thriller', 112, 'Two rival truckers haul a sealed container across a blizzard-bound pass.', 205],
+  ['Paper Moons', 2021, 'Comedy', 97, 'A failing magician and his teenage niece take over a children’s party circuit.', 48],
+  ['Signal Hill', 2024, 'Sci-Fi', 141, 'A radio astronomer hears her own voice in a transmission from 1962.', 262],
+  ['Copperline', 2018, 'Western', 119, 'A mine closes and the town decides who it belongs to.', 30],
+  ['Saltwater Kings', 2022, 'Adventure', 133, 'Three brothers race to salvage a wreck before the treasure hunters arrive.', 190],
+  ['Last Train to Ridley', 2020, 'Mystery', 104, 'Every passenger on the overnight train is lying about the same afternoon.', 340],
+  ['Hollow Orchard', 2017, 'Horror', 99, 'An apple farm that has not had a harvest in forty years suddenly bears fruit.', 95],
+  ['The Quiet Mile', 2025, 'Drama', 126, 'A retired runner coaches the town’s worst cross-country team.', 160],
+  ['Glasshouse', 2016, 'Thriller', 110, 'An architect suspects the house she designed is watching her family.', 230],
+  ['Marigold Avenue', 2023, 'Family', 92, 'A street full of neighbours plans one impossible surprise.', 38],
+  ['Deep Field', 2021, 'Sci-Fi', 137, 'A survey crew finds a perfectly flat plain on a planet with no wind.', 280],
+].map(([name, year, genre, min, overview, hue], i) => ({
+  Id: `m${i}`,
+  Name: name as string,
+  Type: 'Movie',
+  ProductionYear: year as number,
+  Genres: [genre as string],
+  RunTimeTicks: (min as number) * 60 * T,
+  Overview: overview as string,
+  OfficialRating: ['PG-13', 'R', 'PG', 'PG-13'][i % 4],
+  CommunityRating: 6.4 + ((i * 7) % 25) / 10,
+  _hue: hue as number,
+  UserData: { PlayedPercentage: i === 3 ? 42 : i === 6 ? 71 : undefined, PlaybackPositionTicks: i === 3 ? 59 * 60 * T : i === 6 ? 73 * 60 * T : 0, Played: i === 1 },
+}));
+
+const shows: Item[] = [
+  ['Harbour Lights', 2022, 'Drama', 3, 'Life, loss and lobster season in a Nova Scotia fishing town.', 200],
+  ['Stacks', 2024, 'Comedy', 2, 'The night shift at a 24-hour public library.', 55],
+  ['Undertow', 2020, 'Crime', 4, 'A coastal detective reopens the case that ended her father’s career.', 220],
+].map(([name, year, genre, seasons, overview, hue], i) => ({
+  Id: `s${i}`,
+  Name: name as string,
+  Type: 'Series',
+  ProductionYear: year as number,
+  Genres: [genre as string],
+  ChildCount: seasons as number,
+  Overview: overview as string,
+  _hue: hue as number,
+  UserData: { UnplayedItemCount: 6 + i * 4 },
+}));
+
+const views: Item[] = [
+  { Id: 'lib-movies', Name: 'Movies', Type: 'CollectionFolder', CollectionType: 'movies', _hue: 30 },
+  { Id: 'lib-shows', Name: 'TV Shows', Type: 'CollectionFolder', CollectionType: 'tvshows', _hue: 200 },
+];
+
+function episodes(seriesId: string, seasonNo: number): Item[] {
+  const s = shows.find((x) => x.Id === seriesId)!;
+  const titles = ['Pilot', 'Low Tide', 'The Ledger', 'Fog Bell', 'Open Water', 'Inventory', 'Night Ferry', 'Spring Thaw'];
+  return titles.map((t, i) => ({
+    Id: `${seriesId}-${seasonNo}-${i + 1}`,
+    Name: seasonNo === 1 && i === 0 ? 'Pilot' : t,
+    Type: 'Episode',
+    SeriesId: seriesId,
+    SeriesName: s.Name,
+    ParentIndexNumber: seasonNo,
+    IndexNumber: i + 1,
+    RunTimeTicks: (44 + (i % 3) * 4) * 60 * T,
+    Overview: 'An unexpected visitor arrives with news that changes the season’s plans.',
+    _hue: (s._hue ?? 0) + i * 6,
+    UserData: { Played: seasonNo === 1 && i < 3, PlayedPercentage: seasonNo === 1 && i === 3 ? 35 : undefined },
+  }));
+}
+
+const GB = 1e9;
+
+let dupGroups: DupGroup[] = [
+  {
+    Key: 'movie:tmdb:1', Kind: 'Movie', Title: 'Signal Hill (2024)', LooksLikeEditions: false, ReclaimableBytes: 14.2 * GB,
+    Files: [
+      { ItemId: 'm3', MediaSourceId: 'a1', Title: 'Signal Hill (2024)', Path: 'D:\\Movies\\Signal Hill (2024)\\Signal Hill (2024) - 2160p.mkv', FileName: 'Signal Hill (2024) - 2160p.mkv', SizeBytes: 31.6 * GB, Summary: '4K · HEVC 10-bit · HDR10 · 7.1', Score: 515, Keep: true },
+      { ItemId: 'm3b', MediaSourceId: 'a2', Title: 'Signal Hill (2024)', Path: 'E:\\Downloads\\Signal.Hill.2024.1080p.BluRay.x264.mkv', FileName: 'Signal.Hill.2024.1080p.BluRay.x264.mkv', SizeBytes: 14.2 * GB, Summary: '1080p · H.264 · 5.1', Score: 371, Keep: false },
+    ],
+  },
+  {
+    Key: 'movie:tmdb:2', Kind: 'Movie', Title: 'Copperline (2018)', LooksLikeEditions: false, ReclaimableBytes: 6.3 * GB,
+    Files: [
+      { ItemId: 'm4', MediaSourceId: 'b1', Title: 'Copperline (2018)', Path: 'D:\\Movies\\Copperline (2018)\\Copperline (2018).mkv', FileName: 'Copperline (2018).mkv', SizeBytes: 9.8 * GB, Summary: '1080p · HEVC · 5.1', Score: 362, Keep: true },
+      { ItemId: 'm4b', MediaSourceId: 'b2', Title: 'Copperline (2018)', Path: 'D:\\Movies\\Copperline (2018)\\Copperline (2018) - 720p.mp4', FileName: 'Copperline (2018) - 720p.mp4', SizeBytes: 4.1 * GB, Summary: '720p · H.264 · Stereo', Score: 241, Keep: false },
+      { ItemId: 'm4c', MediaSourceId: 'b3', Title: 'Copperline (2018)', Path: 'F:\\Old Drive\\copperline.avi', FileName: 'copperline.avi', SizeBytes: 2.2 * GB, Summary: '480p · MPEG-4 · Stereo', Score: 121, Keep: false },
+    ],
+  },
+  {
+    Key: 'ep:tvdb:3:s1:e4', Kind: 'Episode', Title: 'Undertow S01E04 · Fog Bell', LooksLikeEditions: false, ReclaimableBytes: 1.9 * GB,
+    Files: [
+      { ItemId: 'e1', MediaSourceId: 'c1', Title: 'Undertow S01E04 · Fog Bell', Path: 'T:\\TV\\Undertow\\Season 01\\Undertow - S01E04.mkv', FileName: 'Undertow - S01E04.mkv', SizeBytes: 2.4 * GB, Summary: '1080p · HEVC · 5.1', Score: 350, Keep: true },
+      { ItemId: 'e2', MediaSourceId: 'c2', Title: 'Undertow S01E04 · Fog Bell', Path: 'T:\\TV\\Undertow (2020)\\S1\\undertow.s01e04.720p.web.mkv', FileName: 'undertow.s01e04.720p.web.mkv', SizeBytes: 1.9 * GB, Summary: '720p · H.264 · Stereo', Score: 240, Keep: false },
+    ],
+  },
+  {
+    Key: 'movie:tmdb:4', Kind: 'Movie', Title: 'Glasshouse (2016)', LooksLikeEditions: true, ReclaimableBytes: 0,
+    Files: [
+      { ItemId: 'm9', MediaSourceId: 'd1', Title: 'Glasshouse (2016)', Path: 'D:\\Movies\\Glasshouse (2016)\\Glasshouse (2016) - Director’s Cut.mkv', FileName: 'Glasshouse (2016) - Director’s Cut.mkv', SizeBytes: 11.1 * GB, Summary: '1080p · H.264 · 5.1', Score: 355, Keep: true, Edition: 'Director’s Cut' },
+      { ItemId: 'm9b', MediaSourceId: 'd2', Title: 'Glasshouse (2016)', Path: 'D:\\Movies\\Glasshouse (2016)\\Glasshouse (2016).mkv', FileName: 'Glasshouse (2016).mkv', SizeBytes: 9.4 * GB, Summary: '1080p · H.264 · 5.1', Score: 352, Keep: true, Edition: null },
+    ],
+  },
+];
+
+const space: SpaceSaverResult = {
+  FilesScanned: 1284,
+  Candidates: movies.slice(0, 9).map((m, i): Estimate => {
+    const size = (6 + ((i * 37) % 19)) * GB;
+    const est = size * (0.34 + (i % 4) * 0.06);
+    return {
+      ItemId: m.Id, MediaSourceId: `src-${m.Id}`, Title: `${m.Name} (${m.ProductionYear})`, Kind: 'Movie' as const,
+      Path: `D:\\Movies\\${m.Name} (${m.ProductionYear})\\${m.Name} (${m.ProductionYear}).mkv`,
+      Summary: i % 3 === 0 ? '1080p · H.264 · 7.1' : i % 3 === 1 ? '1080p · VC1 · 5.1' : '720p · H.264 · 5.1',
+      SizeBytes: size, EstimatedBytes: est, SavingsBytes: size - est, SavingsFraction: 1 - est / size,
+      Note: i % 3 === 1 ? '1080p · VC1 · 5.1 → HEVC' : '1080p · H.264 · 7.1 → HEVC',
+    };
+  }).concat(shows.flatMap((s) => [1, 2, 3].map((e): Estimate => ({
+    ItemId: `${s.Id}-1-${e}`, MediaSourceId: `src-${s.Id}-${e}`, Title: `${s.Name} S01E0${e}`, Kind: 'Episode' as const,
+    Path: `T:\\TV\\${s.Name}\\Season 01\\${s.Name} - S01E0${e}.mkv`, Summary: '1080p · H.264 · 5.1',
+    SizeBytes: 3.1 * GB, EstimatedBytes: 1.3 * GB, SavingsBytes: 1.8 * GB, SavingsFraction: 0.58, Note: '1080p · H.264 · 5.1 → HEVC',
+  })))).sort((a, b) => b.SavingsBytes - a.SavingsBytes),
+  TotalSavingsBytes: 0,
+  TotalCandidateBytes: 0,
+  SkippedByReason: {
+    'Already efficiently encoded': 612,
+    'Saving would be too small': 301,
+    'HDR — turn on "Include HDR" to convert': 38,
+    'Dolby Vision — converting would strip the DV layer': 11,
+    'Too short to bother': 47,
+  },
+  Encoder: { GpuName: 'Quadro P4000', DriverVersion: '581.42', Working: ['hevc_nvenc', 'libx265', 'libsvtav1'], HevcNvenc10Bit: true, Summary: 'GPU conversion ready on Quadro P4000 (HEVC)' },
+};
+space.TotalSavingsBytes = space.Candidates.reduce((a, c) => a + c.SavingsBytes, 0);
+space.TotalCandidateBytes = space.Candidates.reduce((a, c) => a + c.SizeBytes, 0);
+
+let jobs: Job[] = [
+  { Id: 'j1', ItemId: 'm1', MediaSourceId: 'x', Title: 'Northbound Freight (2019)', Path: '', OriginalBytes: 12.4 * GB, EstimatedBytes: 4.9 * GB, Status: 'Running', Progress: 0.38, Speed: 7.4, EtaSeconds: 690, Encoder: 'hevc_nvenc' },
+  { Id: 'j2', ItemId: 'm2', MediaSourceId: 'y', Title: 'Paper Moons (2021)', Path: '', OriginalBytes: 8.2 * GB, EstimatedBytes: 3.1 * GB, Status: 'Queued', Progress: 0, Speed: 0 },
+  { Id: 'j3', ItemId: 'm5', MediaSourceId: 'z', Title: 'Saltwater Kings (2022)', Path: '', OriginalBytes: 14.9 * GB, EstimatedBytes: 5.6 * GB, ResultBytes: 5.2 * GB, Status: 'Done', Progress: 1, Speed: 0, Encoder: 'hevc_nvenc', Message: 'Saved 9.70 GB', FinishedUtc: new Date(Date.now() - 3.6e6).toISOString() },
+  { Id: 'j4', ItemId: 'm7', MediaSourceId: 'w', Title: 'Hollow Orchard (2017)', Path: '', OriginalBytes: 7.7 * GB, EstimatedBytes: 3.0 * GB, Status: 'Failed', Progress: 0, Speed: 0, Message: 'Verification failed: 1 audio tracks, expected 2', FinishedUtc: new Date(Date.now() - 7.2e6).toISOString() },
+];
+
+let held: HeldFile[] = [
+  { Id: 'h1', Title: 'Saltwater Kings (2022)', OriginalPath: 'D:\\Movies\\Saltwater Kings (2022)\\Saltwater Kings (2022).mp4', HeldPath: 'D:\\.reelforge-holding\\…', SizeBytes: 14.9 * GB, Reason: 'Replaced by converted copy', HeldAtUtc: new Date(Date.now() - 3.6e6).toISOString() },
+  { Id: 'h2', Title: 'Marigold Avenue (2023)', OriginalPath: 'E:\\Downloads\\Marigold.Avenue.2023.720p.mkv', HeldPath: 'E:\\.reelforge-holding\\…', SizeBytes: 3.2 * GB, Reason: 'Duplicate', HeldAtUtc: new Date(Date.now() - 4 * 864e5).toISOString() },
+];
+
+let settings: Settings = {
+  TargetCodec: 'Hevc', Preset: 'Balanced', IncludeHdr: false, HoldingDays: 14, PauseWhileStreaming: true,
+  WindowStartHour: 23, WindowEndHour: 7, MaxConcurrentJobs: 1,
+};
+
+let paused = false;
+let gpuStreaming = false;
+
+// Make the running job move so the queue page feels alive.
+setInterval(() => {
+  const r = jobs.find((j) => j.Status === 'Running');
+  if (!r || paused) return;
+  r.Progress = Math.min(0.999, r.Progress + 0.004);
+  r.EtaSeconds = Math.round((1 - r.Progress) * 1100);
+}, 1000);
+
+const session: Session = { server: '', token: 'demo', user: { Id: 'demo', Name: 'Cade', Policy: { IsAdministrator: true } } };
+
+async function handle(method: string, path: string, body: unknown): Promise<unknown> {
+  await new Promise((r) => setTimeout(r, 120));
+  const [p, qs] = path.split('?');
+  const q = new URLSearchParams(qs);
+  const all = [...movies, ...shows];
+
+  if (p === '/UserViews') return { Items: views };
+  if (p === '/UserItems/Resume') return { Items: movies.filter((m) => (m.UserData?.PlayedPercentage ?? 0) > 0) };
+  if (p === '/Shows/NextUp') return { Items: shows.map((s) => episodes(s.Id, 1)[3]) };
+  if (p === '/Items/Latest') return q.get('parentId') === 'lib-shows' ? shows : movies.slice().reverse();
+  if (p === '/Items') {
+    const types = q.get('includeItemTypes');
+    let list = q.get('parentId') === 'lib-shows' || types === 'Series' ? shows : movies;
+    const term = q.get('searchTerm')?.toLowerCase();
+    if (term) list = all.filter((x) => x.Name.toLowerCase().includes(term));
+    if (q.get('sortBy') === 'DateCreated,SortName') list = list.slice().reverse();
+    if (q.get('sortBy') === 'ProductionYear,SortName') list = list.slice().sort((a, b) => (b.ProductionYear ?? 0) - (a.ProductionYear ?? 0));
+    return { Items: list, TotalRecordCount: list.length };
+  }
+  if (p.startsWith('/Shows/') && p.endsWith('/Seasons')) {
+    const id = p.split('/')[2];
+    const s = shows.find((x) => x.Id === id)!;
+    return { Items: Array.from({ length: s.ChildCount ?? 1 }, (_, i) => ({ Id: `${id}-season-${i + 1}`, Name: `Season ${i + 1}`, Type: 'Season', IndexNumber: i + 1, SeriesId: id, _hue: s._hue })) };
+  }
+  if (p.startsWith('/Shows/') && p.endsWith('/Episodes')) {
+    const id = p.split('/')[2];
+    return { Items: episodes(id, Number(q.get('seasonId')?.split('-').pop() ?? 1)) };
+  }
+  if (p.startsWith('/Items/') && p.endsWith('/PlaybackInfo')) return { MediaSources: [], PlaySessionId: 'demo' };
+  if (p.startsWith('/Items/')) {
+    const id = p.split('/')[2];
+    const found = all.find((x) => x.Id === id);
+    if (found) return { ...found, People: [{ Name: 'Ana Ferreira', Type: 'Director' }, { Name: 'Tom Okafor', Role: 'Lead', Type: 'Actor' }, { Name: 'Ruth Lindqvist', Role: 'Mara', Type: 'Actor' }] };
+    const [sid, sn, en] = id.split('-');
+    return episodes(sid, Number(sn))[Number(en) - 1];
+  }
+  if (p.startsWith('/UserPlayedItems')) return undefined;
+  if (p.startsWith('/Sessions')) return undefined;
+
+  // Media Manager
+  if (p === '/ReelForge/Overview')
+    return {
+      Libraries: [{ Id: 'lib-movies', Name: 'Movies', CollectionType: 'movies', Locations: ['D:\\Movies'] }, { Id: 'lib-shows', Name: 'TV Shows', CollectionType: 'tvshows', Locations: ['T:\\TV'] }],
+      Encoder: space.Encoder,
+      Jellyfin: { HardwareAcceleration: gpuStreaming ? 'nvenc' : 'none', EnableHardwareEncoding: gpuStreaming, AllowHevcEncoding: gpuStreaming },
+      Queue: { Paused: paused, Waiting: paused ? 'Paused' : null, Queued: jobs.filter((j) => j.Status === 'Queued').length, Running: jobs.filter((j) => j.Status === 'Running').length, SavedBytes: 9.7 * GB },
+      Holding: { Count: held.length, Bytes: held.reduce((a, h) => a + h.SizeBytes, 0), Days: settings.HoldingDays },
+    };
+  if (p === '/ReelForge/Duplicates') return dupGroups;
+  if (p === '/ReelForge/Duplicates/Remove') {
+    const ids = new Set((body as { Files: { MediaSourceId: string }[] }).Files.map((f) => f.MediaSourceId));
+    for (const g of dupGroups) {
+      for (const f of g.Files.filter((x) => ids.has(x.MediaSourceId))) {
+        held.unshift({ Id: f.MediaSourceId, Title: f.Title, OriginalPath: f.Path, HeldPath: '', SizeBytes: f.SizeBytes, Reason: 'Duplicate', HeldAtUtc: new Date().toISOString() });
+      }
+      g.Files = g.Files.filter((x) => !ids.has(x.MediaSourceId));
+    }
+    dupGroups = dupGroups.filter((g) => g.Files.length > 1);
+    return { Removed: ids.size, Errors: [], HoldingDays: settings.HoldingDays };
+  }
+  if (p === '/ReelForge/SpaceSaver') {
+    const kind = q.get('kind');
+    if (!kind) return space;
+    const c = space.Candidates.filter((x) => x.Kind === kind);
+    return { ...space, Candidates: c, TotalSavingsBytes: c.reduce((a, x) => a + x.SavingsBytes, 0), TotalCandidateBytes: c.reduce((a, x) => a + x.SizeBytes, 0) };
+  }
+  if (p === '/ReelForge/SpaceSaver/Queue') {
+    const files = (body as { Files: { MediaSourceId: string }[] }).Files;
+    const added = files.map((f, i) => {
+      const c = space.Candidates.find((x) => x.MediaSourceId === f.MediaSourceId)!;
+      return { Id: `n${Date.now()}${i}`, ItemId: c.ItemId, MediaSourceId: c.MediaSourceId, Title: c.Title, Path: c.Path, OriginalBytes: c.SizeBytes, EstimatedBytes: c.EstimatedBytes, Status: 'Queued' as const, Progress: 0, Speed: 0 };
+    });
+    jobs = jobs.concat(added);
+    return added;
+  }
+  if (p === '/ReelForge/Jobs') return { Paused: paused, Waiting: paused ? 'Paused' : null, Jobs: jobs };
+  if (p === '/ReelForge/Jobs/Pause') { paused = q.get('paused') === 'true'; return undefined; }
+  if (p === '/ReelForge/Jobs/ClearFinished') { jobs = jobs.filter((j) => !['Done', 'Failed', 'Cancelled'].includes(j.Status)); return {}; }
+  if (p.startsWith('/ReelForge/Jobs/') && p.endsWith('/Cancel')) {
+    const j = jobs.find((x) => x.Id === p.split('/')[3]);
+    if (j) { j.Status = 'Cancelled'; j.Message = 'Cancelled'; }
+    return undefined;
+  }
+  if (p === '/ReelForge/Holding') return held;
+  if (p === '/ReelForge/Holding/EmptyAll') { const b = held.reduce((a, h) => a + h.SizeBytes, 0); held = []; return { FreedBytes: b }; }
+  if (p.startsWith('/ReelForge/Holding/')) { held = held.filter((h) => h.Id !== p.split('/')[3]); return undefined; }
+  if (p === '/ReelForge/Settings') { if (method === 'POST') settings = body as Settings; return settings; }
+  if (p === '/ReelForge/Gpu/EnableStreamingAcceleration') { gpuStreaming = true; return {}; }
+  if (p === '/ReelForge/Gpu/Refresh') return space.Encoder;
+  throw new Error(`demo: no handler for ${method} ${path}`);
+}
+
+export const demo = { session, handle };

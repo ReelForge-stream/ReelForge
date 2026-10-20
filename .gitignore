@@ -1,0 +1,14 @@
+# build output
+bin/
+obj/
+node_modules/
+server/ReelForge/Web/
+packaging/windows/stage/
+packaging/windows/downloads/
+packaging/windows/dist/
+# editors / OS
+.vs/
+.vscode/
+*.user
+.DS_Store
+Thumbs.db
