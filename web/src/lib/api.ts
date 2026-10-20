@@ -45,7 +45,7 @@ export class ApiError extends Error {
 }
 
 export function loadSession(): Session | null {
-  if (isDemo) return demo.session;
+  if (isDemo) return new URLSearchParams(location.search).has('profiles') ? null : demo.session;
   try {
     const raw = localStorage.getItem(STORE);
     return raw ? (JSON.parse(raw) as Session) : null;
@@ -63,8 +63,21 @@ export function saveSession(s: Session | null) {
   }
 }
 
+/** Profiles shown on "Who's watching?": the server's users that aren't hidden from the sign-in screen. */
+export async function publicUsers(server: string): Promise<User[]> {
+  if (isDemo) return demo.handle('GET', '/Users/Public', undefined) as Promise<User[]>;
+  const res = await fetch(`${server}/Users/Public`, { headers: { Authorization: authHeader() } });
+  if (!res.ok) throw new ApiError(res.status, `${res.status}`);
+  return (await res.json()) as User[];
+}
+
+export function userImage(server: string, u: User, size: number): string | undefined {
+  if (isDemo || !u.PrimaryImageTag) return undefined;
+  return `${server}/Users/${u.Id}/Images/Primary?width=${size}&quality=90&tag=${u.PrimaryImageTag}`;
+}
+
 export async function login(server: string, username: string, password: string): Promise<Session> {
-  if (isDemo) return demo.session;
+  if (isDemo) return { ...demo.session, user: { ...demo.session.user, Name: username || demo.session.user.Name } };
   const res = await fetch(`${server}/Users/AuthenticateByName`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader() },
@@ -118,7 +131,7 @@ export class Api {
 
   // ---------- Browsing ----------
 
-  private static fields = 'PrimaryImageAspectRatio,ProductionYear,Overview,Genres,OfficialRating,CommunityRating,ChildCount';
+  private static fields = 'PrimaryImageAspectRatio,ProductionYear,Overview,Genres,OfficialRating,CommunityRating,ChildCount,DateCreated';
 
   views() {
     return this.get<{ Items: Item[] }>(`/UserViews?userId=${this.userId}`).then((r) => r.Items);
@@ -138,7 +151,7 @@ export class Api {
     return this.get<Item[]>(`/Items/Latest?userId=${this.userId}&parentId=${parentId}&limit=18&fields=${Api.fields}`);
   }
 
-  items(opts: { parentId?: string; types?: string; sortBy?: string; sortOrder?: string; search?: string; start?: number; limit?: number; genre?: string }) {
+  items(opts: { parentId?: string; types?: string; sortBy?: string; sortOrder?: string; search?: string; start?: number; limit?: number; genre?: string; favorites?: boolean }) {
     const q = new URLSearchParams({
       userId: this.userId,
       recursive: 'true',
@@ -153,11 +166,30 @@ export class Api {
     if (opts.types) q.set('includeItemTypes', opts.types);
     if (opts.search) q.set('searchTerm', opts.search);
     if (opts.genre) q.set('genres', opts.genre);
+    if (opts.favorites) q.set('filters', 'IsFavorite');
     return this.get<{ Items: Item[]; TotalRecordCount: number }>(`/Items?${q}`);
   }
 
   item(id: string) {
-    return this.get<Item>(`/Items/${id}?userId=${this.userId}&fields=${Api.fields},People,MediaSources`);
+    return this.get<Item>(`/Items/${id}?userId=${this.userId}&fields=${Api.fields},People,MediaSources,MediaStreams,Studios,Taglines`);
+  }
+
+  similar(id: string) {
+    return this.get<{ Items: Item[] }>(`/Items/${id}/Similar?userId=${this.userId}&limit=12&fields=${Api.fields}`).then((r) => r.Items);
+  }
+
+  genres(parentId?: string) {
+    const q = new URLSearchParams({ userId: this.userId, sortBy: 'SortName' });
+    if (parentId) q.set('parentId', parentId);
+    return this.get<{ Items: { Name: string; Id: string }[] }>(`/Genres?${q}`).then((r) => r.Items);
+  }
+
+  setFavorite(id: string, fav: boolean) {
+    return fav ? this.post(`/UserFavoriteItems/${id}?userId=${this.userId}`) : this.del(`/UserFavoriteItems/${id}?userId=${this.userId}`);
+  }
+
+  users() {
+    return this.get<User[]>('/Users');
   }
 
   seasons(seriesId: string) {
@@ -172,9 +204,17 @@ export class Api {
     return played ? this.post(`/UserPlayedItems/${id}?userId=${this.userId}`) : this.del(`/UserPlayedItems/${id}?userId=${this.userId}`);
   }
 
-  image(item: Item, kind: 'Primary' | 'Backdrop' | 'Thumb', width: number): string | undefined {
+  image(item: Item, kind: 'Primary' | 'Backdrop' | 'Thumb' | 'Logo', width: number): string | undefined {
     if (isDemo) return undefined;
     const s = this.session.server;
+    if (kind === 'Logo') {
+      if (item.ImageTags?.Logo) return `${s}/Items/${item.Id}/Images/Logo?maxWidth=${width}&quality=90&tag=${item.ImageTags.Logo}`;
+      if (item.ParentLogoItemId && item.ParentLogoImageTag)
+        return `${s}/Items/${item.ParentLogoItemId}/Images/Logo?maxWidth=${width}&quality=90&tag=${item.ParentLogoImageTag}`;
+      return undefined;
+    }
+    if (kind === 'Thumb' && !item.ImageTags?.Thumb && item.ParentThumbItemId && item.ParentThumbImageTag && item.Type !== 'Episode')
+      return `${s}/Items/${item.ParentThumbItemId}/Images/Thumb?maxWidth=${width}&quality=85&tag=${item.ParentThumbImageTag}`;
     if (kind === 'Backdrop') {
       if (item.BackdropImageTags?.length) return `${s}/Items/${item.Id}/Images/Backdrop/0?maxWidth=${width}&quality=85&tag=${item.BackdropImageTags[0]}`;
       if (item.ParentBackdropItemId && item.ParentBackdropImageTags?.length)

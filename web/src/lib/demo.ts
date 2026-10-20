@@ -22,12 +22,15 @@ const movies: Item[] = [
   Name: name as string,
   Type: 'Movie',
   ProductionYear: year as number,
-  Genres: [genre as string],
+  Genres: [...new Set([genre as string, ['Drama', 'Thriller', 'Comedy', 'Adventure'][i % 4]])],
   RunTimeTicks: (min as number) * 60 * T,
   Overview: overview as string,
   OfficialRating: ['PG-13', 'R', 'PG', 'PG-13'][i % 4],
   CommunityRating: 6.4 + ((i * 7) % 25) / 10,
   _hue: hue as number,
+  DateCreated: new Date(Date.now() - (i < 3 ? i + 1 : 30 + i) * 86400000).toISOString(),
+  Taglines: i === 3 ? ['Some messages take sixty years to arrive.'] : undefined,
+  Studios: [{ Name: ['Northlight Pictures', 'Harrow & Vale', 'Tidewater Films'][i % 3] }],
   UserData: { PlayedPercentage: i === 3 ? 42 : i === 6 ? 71 : undefined, PlaybackPositionTicks: i === 3 ? 59 * 60 * T : i === 6 ? 73 * 60 * T : 0, Played: i === 1 },
 }));
 
@@ -44,6 +47,10 @@ const shows: Item[] = [
   ChildCount: seasons as number,
   Overview: overview as string,
   _hue: hue as number,
+  DateCreated: new Date(Date.now() - (i === 1 ? 2 : 40) * 86400000).toISOString(),
+  OfficialRating: ['TV-14', 'TV-PG', 'TV-MA'][i],
+  CommunityRating: 7.6 + i / 5,
+  Studios: [{ Name: ['Harbourside TV', 'Night Owl', 'Grey Coast'][i] }],
   UserData: { UnplayedItemCount: 6 + i * 4 },
 }));
 
@@ -60,6 +67,7 @@ function episodes(seriesId: string, seasonNo: number): Item[] {
     Name: seasonNo === 1 && i === 0 ? 'Pilot' : t,
     Type: 'Episode',
     SeriesId: seriesId,
+    SeasonId: `${seriesId}-season-${seasonNo}`,
     SeriesName: s.Name,
     ParentIndexNumber: seasonNo,
     IndexNumber: i + 1,
@@ -165,6 +173,26 @@ setInterval(() => {
 
 const session: Session = { server: '', token: 'demo', user: { Id: 'demo', Name: 'Cade', Policy: { IsAdministrator: true } } };
 
+const favorites = new Set<string>(['m3', 's0']);
+const played = new Set<string>(['m1']);
+const people = [
+  { Name: 'Ana Ferreira', Type: 'Director' },
+  { Name: 'Tom Okafor', Role: 'Lead', Type: 'Actor' },
+  { Name: 'Ruth Lindqvist', Role: 'Mara', Type: 'Actor' },
+  { Name: 'Dev Raman', Role: 'Eli', Type: 'Actor' },
+  { Name: 'Hollis Grant', Role: 'The Captain', Type: 'Actor' },
+  { Name: 'June Park', Type: 'Writer' },
+];
+const profiles = [
+  { Id: 'demo', Name: 'Cade', HasPassword: false },
+  { Id: 'u2', Name: 'Jess', HasPassword: false },
+  { Id: 'u3', Name: 'Kids', HasPassword: false },
+  { Id: 'u4', Name: 'Guest', HasPassword: true },
+];
+function withUser(i: Item): Item {
+  return { ...i, UserData: { ...i.UserData, IsFavorite: favorites.has(i.Id), Played: played.has(i.Id) || !!i.UserData?.Played } };
+}
+
 async function handle(method: string, path: string, body: unknown): Promise<unknown> {
   await new Promise((r) => setTimeout(r, 120));
   const [p, qs] = path.split('?');
@@ -184,7 +212,29 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   if (p === '/ReelForge/Network/Locations') return { Shares: [], Mapped: [{ Letter: 'Z:', Path: '\\\\10.0.0.201\\plexdata', Reachable: false }] };
   if (p === '/ReelForge/Network/Connect') return { Path: '\\\\10.0.0.201\\plexdata' };
   if (p === '/ReelForge/Network/Shares') return { Shares: ['backups', 'photos', 'plexdata'] };
+  if (p === '/Users/Public') return profiles;
   if (p === '/UserViews') return { Items: views };
+  if (p === '/Genres') {
+    const pool = q.get('parentId') === 'lib-shows' ? shows : q.get('parentId') === 'lib-movies' ? movies : all;
+    return { Items: [...new Set(pool.flatMap((x) => x.Genres ?? []))].sort().map((g) => ({ Id: `g-${g}`, Name: g })) };
+  }
+  if (p.startsWith('/UserFavoriteItems/')) {
+    const id = p.split('/')[2];
+    if (method === 'DELETE') favorites.delete(id);
+    else favorites.add(id);
+    return {};
+  }
+  if (p.startsWith('/UserPlayedItems/')) {
+    const id = p.split('/')[2];
+    if (method === 'DELETE') played.delete(id);
+    else played.add(id);
+    return {};
+  }
+  if (p.startsWith('/Items/') && p.endsWith('/Similar')) {
+    const id = p.split('/')[2];
+    const me = all.find((x) => x.Id === id);
+    return { Items: all.filter((x) => x.Id !== id && x.Type === (me?.Type ?? 'Movie')).concat(me?.Type === 'Series' ? movies.slice(0, 6) : []).slice(0, 12).map(withUser) };
+  }
   if (p === '/UserItems/Resume') return { Items: movies.filter((m) => (m.UserData?.PlayedPercentage ?? 0) > 0) };
   if (p === '/Shows/NextUp') return { Items: shows.map((s) => episodes(s.Id, 1)[3]) };
   if (p === '/Items/Latest') return q.get('parentId') === 'lib-shows' ? shows : movies.slice().reverse();
@@ -193,9 +243,14 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     let list = q.get('parentId') === 'lib-shows' || types === 'Series' ? shows : movies;
     const term = q.get('searchTerm')?.toLowerCase();
     if (term) list = all.filter((x) => x.Name.toLowerCase().includes(term));
+    if (types?.includes('Movie') && types.includes('Series') && !q.get('parentId')) list = all;
+    if (q.get('genres')) list = list.filter((x) => x.Genres?.includes(q.get('genres')!));
+    if (q.get('filters') === 'IsFavorite') list = all.filter((x) => favorites.has(x.Id));
+    if (q.get('sortBy') === 'CommunityRating,SortName') list = list.slice().sort((a, b) => (b.CommunityRating ?? 0) - (a.CommunityRating ?? 0));
+    if (q.get('sortBy') === 'SortName') list = list.slice().sort((a, b) => a.Name.localeCompare(b.Name));
     if (q.get('sortBy') === 'DateCreated,SortName') list = list.slice().reverse();
     if (q.get('sortBy') === 'ProductionYear,SortName') list = list.slice().sort((a, b) => (b.ProductionYear ?? 0) - (a.ProductionYear ?? 0));
-    return { Items: list, TotalRecordCount: list.length };
+    return { Items: list.map(withUser), TotalRecordCount: list.length };
   }
   if (p.startsWith('/Shows/') && p.endsWith('/Seasons')) {
     const id = p.split('/')[2];
@@ -210,11 +265,10 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
   if (p.startsWith('/Items/')) {
     const id = p.split('/')[2];
     const found = all.find((x) => x.Id === id);
-    if (found) return { ...found, People: [{ Name: 'Ana Ferreira', Type: 'Director' }, { Name: 'Tom Okafor', Role: 'Lead', Type: 'Actor' }, { Name: 'Ruth Lindqvist', Role: 'Mara', Type: 'Actor' }] };
+    if (found) return { ...withUser(found), People: people, MediaStreams: [{ Type: 'Video', Height: found.Id === 'm3' ? 2160 : 1080 }] };
     const [sid, sn, en] = id.split('-');
     return episodes(sid, Number(sn))[Number(en) - 1];
   }
-  if (p.startsWith('/UserPlayedItems')) return undefined;
   if (p.startsWith('/Sessions')) return undefined;
 
   // Media Manager

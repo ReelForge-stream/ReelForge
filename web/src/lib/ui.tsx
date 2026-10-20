@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { Api } from './api';
+import type { User } from './types';
 import type { Item } from './types';
 
 // ---------- app context ----------
@@ -108,9 +109,15 @@ function hueOf(item: Item): number {
 }
 
 /** Real artwork when Jellyfin has it; otherwise a generated title card in the house style. */
-export function Art({ item, kind, width }: { item: Item; kind: 'Primary' | 'Thumb' | 'Backdrop'; width: number }) {
+export function Art({ item, kind, width, bare }: { item: Item; kind: 'Primary' | 'Thumb' | 'Backdrop'; width: number; bare?: boolean }) {
   const api = useApi();
-  const url = api.image(item, kind === 'Thumb' && !item.ImageTags?.Thumb ? 'Backdrop' : kind, width) ?? (kind === 'Thumb' ? api.image(item, 'Primary', width) : undefined);
+  const url =
+    kind === 'Thumb'
+      ? api.image(item, 'Thumb', width) ??
+        (item.Type === 'Episode' ? api.image(item, 'Primary', width) : undefined) ??
+        api.image(item, 'Backdrop', width) ??
+        api.image(item, 'Primary', width)
+      : api.image(item, kind, width);
   const [failed, setFailed] = useState(false);
   if (url && !failed) return <img src={url} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
   const h = hueOf(item);
@@ -127,7 +134,7 @@ export function Art({ item, kind, width }: { item: Item; kind: 'Primary' | 'Thum
           linear-gradient(160deg, hsl(${h} 45% 26%) 0%, hsl(${(h + 30) % 360} 40% 12%) 100%)`,
       }}
     >
-      {kind !== 'Backdrop' && (
+      {kind !== 'Backdrop' && !bare && (
         <>
           {title}
           {item.Type === 'Episode' && <small>{epCode(item)} · {item.Name}</small>}
@@ -150,36 +157,6 @@ export function itemLink(i: Item): string {
   return `/item/${i.Id}`;
 }
 
-export function Card({ item, shape = 'poster', showSub = true, showLabel = true }: { item: Item; shape?: 'poster' | 'thumb'; showSub?: boolean; showLabel?: boolean }) {
-  const pct = item.UserData?.PlayedPercentage;
-  const unplayed = item.UserData?.UnplayedItemCount;
-  const sub =
-    item.Type === 'Episode' ? `${item.SeriesName ?? ''} · ${epCode(item)}` : item.Type === 'Series' ? `${item.ChildCount ?? ''} ${item.ChildCount === 1 ? 'season' : 'seasons'}` : item.ProductionYear;
-  return (
-    <Link to={itemLink(item)} className={`card ${shape}`}>
-      <div className="frame">
-        <Art item={item} kind={shape === 'thumb' ? 'Thumb' : 'Primary'} width={shape === 'thumb' ? 560 : 360} />
-        {pct ? (
-          <div className="progress">
-            <span style={{ width: `${pct}%` }} />
-          </div>
-        ) : null}
-        {item.UserData?.Played ? (
-          <span className="badge check" title="Watched">
-            ✓
-          </span>
-        ) : unplayed ? (
-          <span className="badge" title={`${unplayed} unwatched`}>
-            {unplayed}
-          </span>
-        ) : null}
-      </div>
-      {showLabel && <div className="label">{item.Name}</div>}
-      {showLabel && showSub && sub ? <div className="sub">{sub}</div> : null}
-    </Link>
-  );
-}
-
 // ---------- icons (24px, stroke) ----------
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
@@ -195,7 +172,102 @@ export const Icon = {
   check: () => (<svg viewBox="0 0 24 24" {...S}><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>),
   settings: () => (<svg viewBox="0 0 24 24" {...S}><circle cx="12" cy="12" r="3" /><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6" /></svg>),
   logout: () => (<svg viewBox="0 0 24 24" {...S}><path d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4M10 16l-4-4 4-4M6 12h10" /></svg>),
+  info: () => (<svg viewBox="0 0 24 24" {...S}><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.6v.1" strokeWidth="2.2" /></svg>),
+  plus: () => (<svg viewBox="0 0 24 24" {...S}><path d="M12 5v14M5 12h14" /></svg>),
+  close: () => (<svg viewBox="0 0 24 24" {...S}><path d="M6 6l12 12M18 6 6 18" /></svg>),
+  chevronDown: () => (<svg viewBox="0 0 24 24" {...S}><path d="m6 9 6 6 6-6" /></svg>),
+  caret: () => (<svg viewBox="0 0 10 5" fill="currentColor"><path d="M0 0h10L5 5z" /></svg>),
+  heart: () => (<svg viewBox="0 0 24 24" {...S}><path d="M12 19.5s-7.5-4.4-7.5-10A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7.5 2.5c0 5.6-7.5 10-7.5 10z" /></svg>),
+  heartFill: () => (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 19.5s-7.5-4.4-7.5-10A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7.5 2.5c0 5.6-7.5 10-7.5 10z" /></svg>),
+  pencil: () => (<svg viewBox="0 0 24 24" {...S}><path d="M4.5 19.5l1-4L16 5a2 2 0 0 1 3 3L8.5 18.5z" /><path d="M14 7l3 3" /></svg>),
+  user: () => (<svg viewBox="0 0 24 24" {...S}><circle cx="12" cy="8.5" r="3.8" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></svg>),
+  pause: () => (<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1" /><rect x="14" y="4.5" width="4" height="15" rx="1" /></svg>),
+  back10: () => (<svg viewBox="0 0 24 24" {...S}><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" /><path d="M4.5 3.5v4h4" /><text x="12" y="15.5" fontSize="7" textAnchor="middle" fill="currentColor" stroke="none" fontFamily="Instrument Sans, sans-serif" fontWeight="600">10</text></svg>),
+  fwd10: () => (<svg viewBox="0 0 24 24" {...S}><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" /><path d="M19.5 3.5v4h-4" /><text x="12" y="15.5" fontSize="7" textAnchor="middle" fill="currentColor" stroke="none" fontFamily="Instrument Sans, sans-serif" fontWeight="600">10</text></svg>),
+  volume: () => (<svg viewBox="0 0 24 24" {...S}><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg>),
+  mute: () => (<svg viewBox="0 0 24 24" {...S}><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M16 9.5l5 5M21 9.5l-5 5" /></svg>),
+  fullscreen: () => (<svg viewBox="0 0 24 24" {...S}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>),
+  exitFullscreen: () => (<svg viewBox="0 0 24 24" {...S}><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg>),
+  subtitles: () => (<svg viewBox="0 0 24 24" {...S}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 13h4M13 13h4M7 16h7" /></svg>),
+  next: () => (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5.5v13a1 1 0 0 0 1.5.86l9.4-6.5a1 1 0 0 0 0-1.72L6.5 4.64A1 1 0 0 0 5 5.5z" /><rect x="17" y="5" width="2.5" height="14" rx="1" /></svg>),
+  episodes: () => (<svg viewBox="0 0 24 24" {...S}><rect x="3" y="7" width="14" height="12" rx="1.5" /><path d="M7 4h13a1 1 0 0 1 1 1v11" /></svg>),
 };
+
+// ---------- 16:9 tiles (Figma: MovieCard / Medium / HorizontalHomePage, 218×123) ----------
+
+const RECENT_DAYS = 14;
+export function isRecent(i: Item): boolean {
+  if (!i.DateCreated) return false;
+  return Date.now() - new Date(i.DateCreated).getTime() < RECENT_DAYS * 864e5;
+}
+
+/** Opens title details as an overlay over the current page (or as a page when opened directly). */
+export function useDetailsLink() {
+  const location = useLocation();
+  const bg = (location.state as { background?: unknown } | null)?.background ?? location;
+  return (i: Item) => ({ to: itemLink(i), state: i.Type === 'Episode' || i.Type === 'CollectionFolder' ? undefined : { background: bg } });
+}
+
+export function Tile({ item, progress = true }: { item: Item; progress?: boolean }) {
+  const api = useApi();
+  const link = useDetailsLink();
+  const pct = item.UserData?.PlayedPercentage;
+  const hasThumb = !!item.ImageTags?.Thumb || (!!item.ParentThumbImageTag && item.Type !== 'Episode');
+  const logo = hasThumb ? undefined : api.image(item, 'Logo', 300);
+  const label = isRecent(item) && !item.UserData?.Played ? (item.Type === 'Series' ? 'New episodes' : 'Recently added') : null;
+  const title = item.Type === 'Episode' ? `${item.SeriesName ?? ''}` : item.Name;
+  return (
+    <Link {...link(item)} className="tile" aria-label={item.Type === 'Episode' ? `${item.SeriesName} ${epCode(item)} ${item.Name}` : item.Name}>
+      <div className="tile-frame">
+        <Art item={item} kind="Thumb" width={480} bare={!hasThumb} />
+        {!hasThumb && (
+          <div className="tile-title">
+            {logo ? <img src={logo} alt="" loading="lazy" /> : <span>{title}</span>}
+            {item.Type === 'Episode' && <small>{epCode(item)} · {item.Name}</small>}
+          </div>
+        )}
+        {label && <span className="tile-label">{label}</span>}
+        {item.UserData?.Played && <span className="tile-watched" title="Watched"><Icon.check /></span>}
+      </div>
+      {progress && pct ? (
+        <div className="tile-progress" aria-label={`${Math.round(pct)}% watched`}>
+          <span style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
+    </Link>
+  );
+}
+
+/** Ranked row tile: an outlined numeral beside a poster (Figma: Top 10 row). */
+export function RankTile({ item, rank }: { item: Item; rank: number }) {
+  const link = useDetailsLink();
+  return (
+    <Link {...link(item)} className="rank-tile" aria-label={`${rank}. ${item.Name}`}>
+      <span className="rank-num" aria-hidden="true">{rank}</span>
+      <div className="rank-poster">
+        <Art item={item} kind="Primary" width={240} />
+      </div>
+    </Link>
+  );
+}
+
+// ---------- profiles ----------
+
+const AVATAR_TONES = ['#FF8A1F', '#5FD3A6', '#6F9BD1', '#C77DDB', '#E8C547', '#E46F6F', '#4FB6C2', '#93A4B5'];
+
+/** A profile's picture, or a generated tile in the house style (initial on a toned plate). */
+export function Avatar({ user, url, size }: { user: User; url?: string; size: number }) {
+  const [failed, setFailed] = useState(false);
+  if (url && !failed) return <img className="avatar" src={url} alt="" width={size} height={size} onError={() => setFailed(true)} />;
+  let h = 0;
+  for (const c of user.Name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const tone = AVATAR_TONES[h % AVATAR_TONES.length];
+  return (
+    <span className="avatar gen" style={{ width: size, height: size, background: `linear-gradient(150deg, ${tone} 0%, color-mix(in srgb, ${tone} 55%, #17202A) 100%)`, fontSize: size * 0.46 }} aria-hidden="true">
+      {user.Name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
 
 export function Logo() {
   // The Press: steel plates squeezing a white-hot frame (see /brand).

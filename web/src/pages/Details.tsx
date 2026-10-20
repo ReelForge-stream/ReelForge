@@ -1,158 +1,241 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { bytes, runtime } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Item } from '../lib/types';
-import { Art, Card, Icon, epCode, useApi, useAsync, useToast } from '../lib/ui';
+import { Art, Icon, isRecent, useApi, useAsync, useDetailsLink, useToast } from '../lib/ui';
 
-export default function Details() {
+/** Figma: "MovieDetails / Inside" (118:2845), an 850px overlay above the page it was opened from. */
+export default function Details({ hasBackground }: { hasBackground: boolean }) {
   const { id = '' } = useParams();
   const api = useApi();
+  const nav = useNavigate();
   const item = useAsync(() => api.item(id), [id]);
+  const panel = useRef<HTMLDivElement>(null);
 
-  if (item.error) return <div className="err-box">Couldn’t load this title: {item.error}</div>;
-  if (!item.data) return <div className="loading">Loading…</div>;
-  return item.data.Type === 'Series' ? <SeriesView item={item.data} /> : <MovieView item={item.data} onChange={item.reload} />;
-}
+  const close = () => (hasBackground ? nav(-1) : nav('/', { replace: true }));
 
-function Header({ item, children }: { item: Item; children: React.ReactNode }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    window.addEventListener('keydown', esc);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', esc);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => panel.current?.scrollTo({ top: 0 }), [id]);
+
   return (
-    <section className="hero detail-hero">
-      <div className="backdrop">
-        <Art item={item} kind="Backdrop" width={1920} />
-      </div>
-      <div className="copy">
-        <h1 className="title">{item.Name}</h1>
-        <div className="facts">
-          {item.ProductionYear && <span>{item.ProductionYear}</span>}
-          {item.OfficialRating && <span>{item.OfficialRating}</span>}
-          {item.RunTimeTicks && <span>{runtime(item.RunTimeTicks)}</span>}
-          {item.CommunityRating && <span>★ {item.CommunityRating.toFixed(1)}</span>}
-          {item.Genres?.slice(0, 3).map((g) => <span key={g}>{g}</span>)}
-        </div>
-        {children}
-      </div>
-    </section>
+    <div className="details-back" ref={panel} onClick={close}>
+      <article className="details" role="dialog" aria-modal="true" aria-label={item.data?.Name ?? 'Details'} onClick={(e) => e.stopPropagation()}>
+        <button className="details-close" aria-label="Close" onClick={close}>
+          <Icon.close />
+        </button>
+        {item.error && <p className="err-box">Couldn’t load this title: {item.error}</p>}
+        {!item.data && !item.error && <div className="details-hero placeholder" />}
+        {item.data && <DetailsBody item={item.data} onChange={item.reload} />}
+      </article>
+    </div>
   );
 }
 
-function MovieView({ item, onChange }: { item: Item; onChange: () => void }) {
+function DetailsBody({ item, onChange }: { item: Item; onChange: () => void }) {
   const api = useApi();
   const nav = useNavigate();
   const toast = useToast();
-  const pct = item.UserData?.PlayedPercentage;
+  const isSeries = item.Type === 'Series';
+  const logo = api.image(item, 'Logo', 700);
+  const [logoOk, setLogoOk] = useState(true);
+  const fav = !!item.UserData?.IsFavorite;
   const played = !!item.UserData?.Played;
 
-  const toggle = async () => {
+  const seasons = useAsync(() => (isSeries ? api.seasons(item.Id) : Promise.resolve([] as Item[])), [item.Id]);
+  const [season, setSeason] = useState<string | null>(null);
+  useEffect(() => {
+    if (!season && seasons.data?.length) setSeason((seasons.data.find((x) => (x.UserData?.UnplayedItemCount ?? 0) > 0) ?? seasons.data[0]).Id);
+  }, [season, seasons.data]);
+  const episodes = useAsync(() => (isSeries && season ? api.episodes(item.Id, season) : Promise.resolve([] as Item[])), [item.Id, season]);
+  const nextEp = episodes.data?.find((e) => !e.UserData?.Played);
+  const similar = useAsync(() => api.similar(item.Id).catch(() => [] as Item[]), [item.Id]);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const playTarget = isSeries ? nextEp?.Id ?? episodes.data?.[0]?.Id : item.Id;
+  const resumable = isSeries ? (nextEp?.UserData?.PlayedPercentage ?? 0) > 0 : (item.UserData?.PlayedPercentage ?? 0) > 0;
+
+  const toggleFav = async () => {
+    await api.setFavorite(item.Id, !fav);
+    toast(fav ? 'Removed from My List' : 'Added to My List');
+    onChange();
+  };
+  const toggleWatched = async () => {
     await api.markPlayed(item.Id, !played);
     toast(played ? 'Marked as unwatched' : 'Marked as watched');
     onChange();
   };
 
+  const cast = (item.People ?? []).filter((p) => p.Type === 'Actor');
+  const directors = (item.People ?? []).filter((p) => p.Type === 'Director');
+  const writers = (item.People ?? []).filter((p) => p.Type === 'Writer');
+  const videoHeight = item.MediaStreams?.find((s) => s.Type === 'Video')?.Height ?? item.MediaSources?.[0]?.MediaStreams?.find((s) => s.Type === 'Video')?.Height;
+  const quality = videoHeight ? (videoHeight >= 1600 ? '4K' : videoHeight >= 700 ? 'HD' : null) : null;
+  const seasonCount = seasons.data?.length;
+
   return (
     <>
-      <Header item={item}>
-        <div className="actions">
-          <button className="btn primary lg" onClick={() => nav(`/play/${item.Id}`)}>
-            <Icon.play />
-            {pct ? 'Resume' : 'Play'}
-          </button>
-          {pct ? (
-            <button className="btn lg" onClick={() => nav(`/play/${item.Id}?from=start`)}>
-              Start over
+      <section className="details-hero">
+        <Art item={item} kind="Backdrop" width={1280} />
+        <div className="details-hero-shade" aria-hidden="true" />
+        <div className="details-hero-copy">
+          {logo && logoOk ? <img className="details-logo" src={logo} alt={item.Name} onError={() => setLogoOk(false)} /> : <h1 className="details-title">{item.Name}</h1>}
+          <div className="details-actions">
+            <button className="btn-play" disabled={!playTarget} onClick={() => playTarget && nav(`/play/${playTarget}`)}>
+              <Icon.play />
+              {resumable ? 'Resume' : 'Play'}
             </button>
-          ) : null}
-          <button className="btn lg" onClick={toggle} aria-pressed={played}>
-            <Icon.check />
-            {played ? 'Watched' : 'Mark watched'}
-          </button>
+            <button className={`circle-btn${fav ? ' on' : ''}`} aria-pressed={fav} aria-label={fav ? 'Remove from My List' : 'Add to My List'} title={fav ? 'Remove from My List' : 'Add to My List'} onClick={toggleFav}>
+              {fav ? <Icon.check /> : <Icon.plus />}
+            </button>
+            {!isSeries && (
+              <button className={`circle-btn${played ? ' on' : ''}`} aria-pressed={played} aria-label={played ? 'Mark as unwatched' : 'Mark as watched'} title={played ? 'Mark as unwatched' : 'Mark as watched'} onClick={toggleWatched}>
+                <Icon.check />
+              </button>
+            )}
+          </div>
         </div>
-      </Header>
-      <div className="detail-body">
-        <div>
-          {item.Overview && <p className="measure" style={{ fontSize: '1.08rem' }}>{item.Overview}</p>}
-          {item.MediaSources && item.MediaSources.length > 1 && (
-            <p className="muted small" style={{ marginTop: 16 }}>
-              {item.MediaSources.length} versions on disk ({item.MediaSources.map((s) => bytes(s.Size ?? 0)).join(', ')}). Duplicates can be cleaned up in Media Manager.
+      </section>
+
+      <section className="details-info">
+        <div className="details-main">
+          <div className="meta-line">
+            {isRecent(item) && <span className="meta-new">New</span>}
+            {item.ProductionYear && <span>{item.ProductionYear}</span>}
+            {isSeries && seasonCount ? <span>{seasonCount} {seasonCount === 1 ? 'Season' : 'Seasons'}</span> : null}
+            {!isSeries && item.RunTimeTicks ? <span>{hm(item.RunTimeTicks)}</span> : null}
+            {quality && <span className="quality">{quality}</span>}
+          </div>
+          {item.OfficialRating && (
+            <div className="meta-line">
+              <span className="rating-box">{item.OfficialRating}</span>
+              {item.CommunityRating ? <span className="meta-dim">★ {item.CommunityRating.toFixed(1)}</span> : null}
+            </div>
+          )}
+          {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
+          {item.Overview && <p className="details-overview">{item.Overview}</p>}
+        </div>
+        <div className="details-side">
+          {cast.length > 0 && (
+            <p>
+              <span className="meta-dim">Cast: </span>
+              {cast.slice(0, 3).map((p) => p.Name).join(', ')}
+              {cast.length > 3 && <>, <a href="#about" className="more-link">more</a></>}
             </p>
           )}
+          {item.Genres?.length ? <p><span className="meta-dim">Genres: </span>{item.Genres.join(', ')}</p> : null}
+          {item.Studios?.length ? <p><span className="meta-dim">{isSeries ? 'Network' : 'Studio'}: </span>{item.Studios.slice(0, 2).map((s) => s.Name).join(', ')}</p> : null}
         </div>
-        <People item={item} />
-      </div>
-    </>
-  );
-}
+      </section>
 
-function People({ item }: { item: Item }) {
-  const people = (item.People ?? []).filter((p) => p.Type === 'Director' || p.Type === 'Actor').slice(0, 8);
-  if (!people.length) return null;
-  return (
-    <aside className="people">
-      {people.map((p) => (
-        <div key={`${p.Name}-${p.Type}`}>
-          <span>{p.Name}</span>
-          <span className="muted">{p.Type === 'Director' ? 'Director' : p.Role}</span>
-        </div>
-      ))}
-    </aside>
-  );
-}
-
-function SeriesView({ item }: { item: Item }) {
-  const api = useApi();
-  const nav = useNavigate();
-  const seasons = useAsync(() => api.seasons(item.Id), [item.Id]);
-  const [season, setSeason] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!season && seasons.data?.length) {
-      // Open on the first season with something unwatched, else the first one.
-      const s = seasons.data.find((x) => (x.UserData?.UnplayedItemCount ?? 0) > 0) ?? seasons.data[0];
-      setSeason(s.Id);
-    }
-  }, [season, seasons.data]);
-
-  const episodes = useAsync(() => (season ? api.episodes(item.Id, season) : Promise.resolve([] as Item[])), [item.Id, season]);
-  const next = episodes.data?.find((e) => !e.UserData?.Played);
-
-  return (
-    <>
-      <Header item={item}>
-        <div className="actions">
-          {next && (
-            <button className="btn primary lg" onClick={() => nav(`/play/${next.Id}`)}>
-              <Icon.play />
-              {next.UserData?.PlayedPercentage ? 'Resume' : 'Play'} {epCode(next)}
-            </button>
-          )}
-        </div>
-      </Header>
-      <div className="detail-body">
-        <div>
-          {item.Overview && <p className="measure" style={{ fontSize: '1.08rem', marginBottom: 32 }}>{item.Overview}</p>}
-          <div className="season-tabs chips" role="tablist">
-            {seasons.data?.map((s) => (
-              <button key={s.Id} role="tab" className="chip" aria-pressed={season === s.Id} aria-selected={season === s.Id} onClick={() => setSeason(s.Id)}>
-                {s.Name}
-              </button>
-            ))}
+      {isSeries && (
+        <section className="details-section">
+          <div className="section-head">
+            <h2>Episodes</h2>
+            {seasons.data && seasons.data.length > 1 ? (
+              <select className="select season-select" aria-label="Season" value={season ?? ''} onChange={(e) => setSeason(e.target.value)}>
+                {seasons.data.map((s) => (
+                  <option key={s.Id} value={s.Id}>{s.Name}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="section-aside">{seasons.data?.[0]?.Name ?? ''}</span>
+            )}
           </div>
-          <div className="episodes">
+          <ol className="episode-list">
             {episodes.data?.map((e) => (
-              <div key={e.Id} className="episode" role="link" tabIndex={0} onClick={() => nav(`/play/${e.Id}`)} onKeyDown={(k) => k.key === 'Enter' && nav(`/play/${e.Id}`)}>
-                <Card item={e} shape="thumb" showLabel={false} />
-                <div>
-                  <h3>
-                    {e.IndexNumber}. {e.Name}
-                  </h3>
-                  <span className="muted small">{runtime(e.RunTimeTicks)}{e.UserData?.Played ? ' · Watched' : ''}</span>
-                  {e.Overview && <p>{e.Overview}</p>}
-                </div>
-              </div>
+              <li key={e.Id}>
+                <button className={`episode-row${e.Id === nextEp?.Id ? ' current' : ''}`} onClick={() => nav(`/play/${e.Id}`)}>
+                  <span className="ep-num">{e.IndexNumber}</span>
+                  <span className="ep-thumb">
+                    <Art item={e} kind="Thumb" width={320} />
+                    <span className="ep-play" aria-hidden="true"><Icon.play /></span>
+                    {e.UserData?.PlayedPercentage ? <span className="ep-progress"><span style={{ width: `${e.UserData.PlayedPercentage}%` }} /></span> : null}
+                  </span>
+                  <span className="ep-text">
+                    <span className="ep-head">
+                      <span className="ep-title">{e.Name}</span>
+                      <span className="ep-time">{e.RunTimeTicks ? `${Math.round(e.RunTimeTicks / 6e8)}m` : ''}</span>
+                    </span>
+                    {e.Overview && <span className="ep-overview">{e.Overview}</span>}
+                  </span>
+                </button>
+              </li>
             ))}
+          </ol>
+        </section>
+      )}
+
+      {similar.data && similar.data.length > 0 && (
+        <section className="details-section">
+          <div className="section-head"><h2>More Like This</h2></div>
+          <div className={`similar-grid${moreOpen ? ' open' : ''}`}>
+            {similar.data.slice(0, moreOpen ? 12 : 6).map((s) => <SimilarCard key={s.Id} item={s} />)}
           </div>
-        </div>
-        <People item={item} />
-      </div>
+          {similar.data.length > 6 && (
+            <div className="similar-more">
+              <button className={`circle-btn${moreOpen ? ' flip' : ''}`} aria-label={moreOpen ? 'Show fewer' : 'Show more'} onClick={() => setMoreOpen((o) => !o)}>
+                <Icon.chevronDown />
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section className="details-section about" id="about">
+        <h2>About <strong>{item.Name}</strong></h2>
+        {directors.length > 0 && <p><span className="meta-dim">Director: </span>{directors.map((p) => p.Name).join(', ')}</p>}
+        {cast.length > 0 && <p><span className="meta-dim">Cast: </span>{cast.slice(0, 15).map((p) => p.Name).join(', ')}</p>}
+        {writers.length > 0 && <p><span className="meta-dim">Writer: </span>{writers.map((p) => p.Name).join(', ')}</p>}
+        {item.Genres?.length ? <p><span className="meta-dim">Genres: </span>{item.Genres.join(', ')}</p> : null}
+        {item.OfficialRating && <p><span className="meta-dim">Maturity rating: </span><span className="rating-box">{item.OfficialRating}</span></p>}
+      </section>
     </>
   );
+}
+
+/** Figma: More Like This card: art with runtime, rating/year/+ row, overview. */
+function SimilarCard({ item }: { item: Item }) {
+  const api = useApi();
+  const link = useDetailsLink();
+  const toast = useToast();
+  const [fav, setFav] = useState(!!item.UserData?.IsFavorite);
+  const toggle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    await api.setFavorite(item.Id, !fav);
+    setFav(!fav);
+    toast(fav ? 'Removed from My List' : 'Added to My List');
+  };
+  return (
+    <Link className="similar-card" {...link(item)} replace>
+      <span className="similar-art">
+        <Art item={item} kind="Thumb" width={400} />
+        {item.RunTimeTicks ? <span className="similar-time">{hm(item.RunTimeTicks)}</span> : null}
+        <span className="similar-name">{item.Name}</span>
+      </span>
+      <span className="similar-meta">
+        <span className="similar-tags">
+          {item.OfficialRating && <span className="rating-box">{item.OfficialRating}</span>}
+          {item.ProductionYear && <span className="meta-dim">{item.ProductionYear}</span>}
+        </span>
+        <button className={`circle-btn sm${fav ? ' on' : ''}`} aria-label={fav ? 'Remove from My List' : 'Add to My List'} onClick={toggle}>
+          {fav ? <Icon.check /> : <Icon.plus />}
+        </button>
+      </span>
+      {item.Overview && <span className="similar-overview">{item.Overview}</span>}
+    </Link>
+  );
+}
+
+function hm(ticks: number): string {
+  const m = Math.round(ticks / 6e8);
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 }

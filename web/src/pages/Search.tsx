@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Item } from '../lib/types';
-import { Card, useApi } from '../lib/ui';
+import { Tile, useApi } from '../lib/ui';
 
 export default function Search() {
   const api = useApi();
@@ -23,8 +23,8 @@ export default function Search() {
   }, [api, term]);
 
   return (
-    <div className="page">
-      <div className="page-head">
+    <div className="browse">
+      <div className="browse-head">
         <h1>Search</h1>
       </div>
       <input
@@ -38,7 +38,7 @@ export default function Search() {
       />
       <div style={{ marginTop: 32 }}>
         {results && results.length === 0 && <p className="muted">Nothing matches “{term}”.</p>}
-        {results && results.length > 0 && <div className="grid">{results.map((i) => <Card key={i.Id} item={i} shape={i.Type === 'Episode' ? 'thumb' : 'poster'} />)}</div>}
+        {results && results.length > 0 && <div className="tile-grid">{results.map((i) => <Tile key={i.Id} item={i} />)}</div>}
       </div>
     </div>
   );

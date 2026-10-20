@@ -3,7 +3,7 @@ import { defaultServer, login } from '../lib/api';
 import type { Session } from '../lib/types';
 import { Logo } from '../lib/ui';
 
-export default function Login({ onSignedIn }: { onSignedIn: (s: Session) => void }) {
+export default function Login({ onSignedIn, onBack }: { onSignedIn: (s: Session) => void; onBack?: () => void }) {
   const [server, setServer] = useState(defaultServer());
   const [user, setUser] = useState('');
   const [pw, setPw] = useState('');
@@ -45,6 +45,7 @@ export default function Login({ onSignedIn }: { onSignedIn: (s: Session) => void
         </div>
         {error && <p className="error" role="alert">{error}</p>}
         <button className="btn primary lg" disabled={busy || !user}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        {onBack && <button type="button" className="btn ghost" onClick={onBack}>Back to profiles</button>}
       </form>
     </div>
   );

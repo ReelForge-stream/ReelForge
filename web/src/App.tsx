@@ -1,13 +1,15 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
-import { Api, isDemo, loadSession, saveSession } from './lib/api';
-import type { Session } from './lib/types';
-import { ApiContext, Icon, Logo, ToastHost, useApi, useAsync, usePoll } from './lib/ui';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom';
+import { Api, defaultServer, isDemo, loadSession, publicUsers, saveSession, userImage } from './lib/api';
+import type { Session, User } from './lib/types';
+import { ApiContext, Avatar, Icon, Logo, ToastHost, useApi, useAsync, usePoll } from './lib/ui';
 import Login from './pages/Login';
+import Profiles from './pages/Profiles';
 import Setup from './pages/Setup';
 import { setup } from './lib/setup';
 import Home from './pages/Home';
 import Library from './pages/Library';
+import MyList from './pages/MyList';
 import Details from './pages/Details';
 import Search from './pages/Search';
 import ManagerLayout from './manager/ManagerLayout';
@@ -25,6 +27,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
   // null = still checking; false = this server hasn't been set up yet
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
+  const [manual, setManual] = useState(false); // "Sign in another way" (profiles hidden from the picker)
 
   useEffect(() => {
     if (isDemo) {
@@ -38,8 +41,14 @@ export default function App() {
   const signIn = (s: Session) => {
     saveSession(s);
     setSession(s);
+    setManual(false);
   };
-  const signOut = () => {
+  const signOut = (switchTo?: string) => {
+    try {
+      if (switchTo) sessionStorage.setItem('reelforge.switchTo', switchTo);
+    } catch {
+      /* ignore */
+    }
     saveSession(null);
     setSession(null);
   };
@@ -58,30 +67,10 @@ export default function App() {
             }}
           />
         ) : !api ? (
-          <Login onSignedIn={signIn} />
+          manual ? <Login onSignedIn={signIn} onBack={() => setManual(false)} /> : <Profiles onSignedIn={signIn} onManual={() => setManual(true)} />
         ) : (
           <ApiContext.Provider value={api}>
-            <Routes>
-              <Route path="/play/:id" element={<Suspense fallback={<div className="player" />}><Player /></Suspense>} />
-              <Route element={<Shell onSignOut={signOut} />}>
-                <Route index element={<Home />} />
-                <Route path="library/:id" element={<Library />} />
-                <Route path="item/:id" element={<Details />} />
-                <Route path="search" element={<Search />} />
-                {api.isAdmin && (
-                  <Route path="manager" element={<ManagerLayout />}>
-                    <Route index element={<ManagerOverview />} />
-                    <Route path="duplicates" element={<Duplicates />} />
-                    <Route path="space" element={<SpaceSaver />} />
-                    <Route path="queue" element={<Queue />} />
-                    <Route path="holding" element={<Holding />} />
-                    <Route path="settings" element={<ManagerSettings />} />
-                  </Route>
-                )}
-                <Route path="setup" element={<Navigate to="/" replace />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
+            <AppRoutes onSignOut={signOut} />
           </ApiContext.Provider>
         )}
       </ToastHost>
@@ -89,64 +78,88 @@ export default function App() {
   );
 }
 
-function Shell({ onSignOut }: { onSignOut: () => void }) {
+function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
   const api = useApi();
-  const nav = useNavigate();
+  const location = useLocation();
+  const background = (location.state as { background?: Location } | null)?.background;
+  // Details always open as an overlay. Opened from a link, the page you came from stays behind it;
+  // opened directly (a shared URL), Home sits behind it.
+  const isItem = location.pathname.startsWith('/item/');
+  const pageLocation = background ?? (isItem ? ({ ...location, pathname: '/' } as Location) : location);
+
+  return (
+    <>
+      <Routes location={pageLocation}>
+        <Route path="/play/:id" element={<Suspense fallback={<div className="player" />}><Player /></Suspense>} />
+        <Route element={<Shell onSignOut={onSignOut} />}>
+          <Route index element={<Home />} />
+          <Route path="library/:id" element={<Library />} />
+          <Route path="list" element={<MyList />} />
+          <Route path="search" element={<Search />} />
+          {api.isAdmin && (
+            <Route path="manager" element={<ManagerLayout />}>
+              <Route index element={<ManagerOverview />} />
+              <Route path="duplicates" element={<Duplicates />} />
+              <Route path="space" element={<SpaceSaver />} />
+              <Route path="queue" element={<Queue />} />
+              <Route path="holding" element={<Holding />} />
+              <Route path="settings" element={<ManagerSettings />} />
+            </Route>
+          )}
+          <Route path="setup" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+      {isItem && (
+        <Routes>
+          <Route path="/item/:id" element={<Details hasBackground={!!background} />} />
+        </Routes>
+      )}
+    </>
+  );
+}
+
+function Shell({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
+  const api = useApi();
   const views = useAsync(() => api.views(), []);
   // Right after setup the libraries are still being created: keep checking until they appear.
   usePoll(() => api.views().then(views.setData).catch(() => undefined), 4000, !!views.data && views.data.length === 0);
   const libs = (views.data ?? []).filter((v) => ['movies', 'tvshows', 'homevideos', 'mixed', undefined].includes(v.CollectionType));
+  // TV first, then movies, then everything else (Figma nav order)
+  const order = (t?: string) => (t === 'tvshows' ? 0 : t === 'movies' ? 1 : 2);
+  const sorted = [...libs].sort((a, b) => order(a.CollectionType) - order(b.CollectionType));
+  const [solid, setSolid] = useState(false);
+  useEffect(() => {
+    const on = () => setSolid(window.scrollY > 8);
+    on();
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
   const iconFor = (t?: string) => (t === 'movies' ? <Icon.film /> : t === 'tvshows' ? <Icon.tv /> : <Icon.folder />);
 
   return (
-    <div className="shell">
-      <nav className="rail" aria-label="Main">
-        <div className="brand">
-          <Logo />
-          ReelForge
+    <div className="app">
+      <header className={`topbar${solid ? ' solid' : ''}`}>
+        <div className="topbar-left">
+          <Link to="/" className="topbar-brand" aria-label="ReelForge home">
+            <Logo />
+            <span>ReelForge</span>
+          </Link>
+          <nav className="topnav" aria-label="Main">
+            <NavLink to="/" end>Home</NavLink>
+            {sorted.map((l) => (
+              <NavLink key={l.Id} to={`/library/${l.Id}`}>{l.Name}</NavLink>
+            ))}
+            <NavLink to="/list">My List</NavLink>
+          </nav>
         </div>
-        <NavLink to="/" end>
-          <Icon.home />
-          Home
-        </NavLink>
-        {libs.map((l) => (
-          <NavLink key={l.Id} to={`/library/${l.Id}`}>
-            {iconFor(l.CollectionType)}
-            {l.Name}
-          </NavLink>
-        ))}
-        <NavLink to="/search">
-          <Icon.search />
-          Search
-        </NavLink>
-        {api.isAdmin && (
-          <>
-            <div className="section-gap" />
-            <NavLink to="/manager">
-              <Icon.manager />
-              Media Manager
-            </NavLink>
-            <a href="/web/#/dashboard" className="navlike-link">
-              <Icon.settings />
-              Server settings
-            </a>
-          </>
-        )}
-        <div className="spacer" />
-        <div className="who">Signed in as {api.session.user.Name}{isDemo ? ' (demo)' : ''}</div>
-        {!isDemo && (
-          <button
-            className="navlike"
-            onClick={() => {
-              onSignOut();
-              nav('/');
-            }}
-          >
-            <Icon.logout />
-            Sign out
-          </button>
-        )}
-      </nav>
+        <div className="topbar-right">
+          <Link to="/search" className="icon-btn" aria-label="Search">
+            <Icon.search />
+          </Link>
+          <ProfileMenu onSignOut={onSignOut} />
+        </div>
+      </header>
 
       <main className="main">
         <Outlet />
@@ -157,7 +170,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
           <Icon.home />
           Home
         </NavLink>
-        {libs.slice(0, 2).map((l) => (
+        {sorted.slice(0, 2).map((l) => (
           <NavLink key={l.Id} to={`/library/${l.Id}`}>
             {iconFor(l.CollectionType)}
             {l.Name}
@@ -167,13 +180,86 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
           <Icon.search />
           Search
         </NavLink>
-        {api.isAdmin && (
-          <NavLink to="/manager">
-            <Icon.manager />
-            Manager
-          </NavLink>
-        )}
+        <NavLink to="/list">
+          <Icon.heart />
+          My List
+        </NavLink>
       </nav>
+    </div>
+  );
+}
+
+/** Figma: SmallAvatar + Profile Menu (other profiles, then account actions, then sign out). */
+function ProfileMenu({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
+  const api = useApi();
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [others, setOthers] = useState<User[]>([]);
+  const ref = useRef<HTMLDivElement>(null);
+  const me = api.session.user;
+  const server = api.session.server || defaultServer();
+
+  useEffect(() => {
+    if (!open) return;
+    publicUsers(server).then((u) => setOthers(u.filter((x) => x.Id !== me.Id))).catch(() => setOthers([]));
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open, server, me.Id]);
+
+  const go = (to: string) => {
+    setOpen(false);
+    nav(to);
+  };
+
+  return (
+    <div className="profile-menu-wrap" ref={ref}>
+      <button className="profile-btn" aria-haspopup="menu" aria-expanded={open} aria-label={`${me.Name}: profile menu`} onClick={() => setOpen((o) => !o)}>
+        <Avatar user={me} url={userImage(server, me, 64)} size={32} />
+        <span className={`caret${open ? ' up' : ''}`}><Icon.caret /></span>
+      </button>
+      {open && (
+        <div className="profile-menu" role="menu">
+          <span className="profile-menu-notch" aria-hidden="true" />
+          <div className="pm-profiles">
+            {others.map((u) => (
+              <button key={u.Id} role="menuitem" className="pm-row" onClick={() => onSignOut(u.Id)}>
+                <Avatar user={u} url={userImage(server, u, 64)} size={32} />
+                <span>{u.Name}</span>
+              </button>
+            ))}
+          </div>
+          <div className="pm-actions">
+            {api.isAdmin && (
+              <>
+                <button role="menuitem" className="pm-row" onClick={() => go('/manager')}>
+                  <span className="pm-icon"><Icon.manager /></span>
+                  <span>Media Manager</span>
+                </button>
+                <a role="menuitem" className="pm-row" href="/web/#/dashboard/users">
+                  <span className="pm-icon"><Icon.pencil /></span>
+                  <span>Manage profiles</span>
+                </a>
+                <a role="menuitem" className="pm-row" href="/web/#/dashboard">
+                  <span className="pm-icon"><Icon.settings /></span>
+                  <span>Server settings</span>
+                </a>
+              </>
+            )}
+          </div>
+          {!isDemo && (
+            <button role="menuitem" className="pm-signout" onClick={() => onSignOut()}>
+              Sign out of ReelForge
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

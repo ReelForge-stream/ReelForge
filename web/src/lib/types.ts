@@ -60,7 +60,16 @@ export interface Item {
   SeriesPrimaryImageTag?: string;
   UserData?: UserData;
   MediaSources?: MediaSource[];
+  MediaStreams?: MediaStream[];
   People?: { Name: string; Role?: string; Type: string }[];
+  Studios?: { Name: string }[];
+  DateCreated?: string;
+  PremiereDate?: string;
+  Taglines?: string[];
+  ParentLogoItemId?: string;
+  ParentLogoImageTag?: string;
+  ParentThumbItemId?: string;
+  ParentThumbImageTag?: string;
   /** Demo mode only: a colour seed for generated artwork. */
   _hue?: number;
 }
@@ -69,6 +78,8 @@ export interface User {
   Id: string;
   Name: string;
   Policy?: { IsAdministrator?: boolean };
+  HasPassword?: boolean;
+  PrimaryImageTag?: string;
 }
 
 export interface Session {
