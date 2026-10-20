@@ -826,3 +826,11 @@ code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-siz
   .save-bar { bottom: 84px; }
   .save-bar span { display: none; }
 }
+
+/* crash screen */
+.crash { min-height: 100%; display: grid; place-items: center; padding: 24px; }
+.crash-card { width: min(520px, 100%); display: grid; gap: 16px; }
+.crash-card h1 { font-size: var(--s4); }
+.crash-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.crash-card details { color: var(--muted); font-size: 0.9rem; }
+.crash-card summary { cursor: pointer; margin-bottom: 8px; }

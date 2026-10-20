@@ -110,7 +110,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
               <Route path="space" element={<SpaceSaver />} />
               <Route path="queue" element={<Queue />} />
               <Route path="holding" element={<Holding />} />
-              <Route path="server" element={<ManagerSettings />} />
+              <Route path="settings" element={<ManagerSettings />} />
             </Route>
           )}
           {api.isAdmin && (
