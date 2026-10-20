@@ -1,12 +1,20 @@
 name: Release
 
-# Push a tag like v0.2.0 to publish:
+# Publish a release either way:
+#   - GitHub → Actions → Release → "Run workflow", enter a version like 0.2.0, or
+#   - push a tag: git tag v0.2.0 && git push origin v0.2.0
+# Either way you get:
 #   1. ReelForge_0.2.0.0.zip  - the module; servers auto-update from the feed below
 #   2. ReelForge-Setup-0.2.0.exe - the all-in-one Windows installer
 #   3. the update feed (branch "update-feed", manifest.json)
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.2.0 (creates tag v0.2.0 on main)'
+        required: true
 
 permissions:
   contents: write
@@ -16,6 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
   JELLYFIN_VERSION: '12.2'
   TARGET_ABI: '12.2.0.0'
 
@@ -25,15 +34,18 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
+        run: |
+          V="${TAG#v}"
+          if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::Version must look like 1.2.3 (got '$V')"; exit 1; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
@@ -60,6 +72,9 @@ jobs:
           md5sum out/ReelForge_${V}.0.zip | cut -d' ' -f1 > out/checksum.txt
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: ReelForge ${{ steps.v.outputs.version }}
           files: out/ReelForge_${{ steps.v.outputs.version }}.0.zip
           generate_release_notes: true
       - uses: actions/upload-artifact@v4
@@ -71,11 +86,11 @@ jobs:
     needs: module
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
       - name: Install Inno Setup
@@ -85,6 +100,7 @@ jobs:
         run: ./packaging/windows/build.ps1 -Version ${{ needs.module.outputs.version }} -JellyfinVersion $env:JELLYFIN_VERSION -SkipTests
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
           files: packaging/windows/dist/ReelForge-Setup-${{ needs.module.outputs.version }}.exe
 
   update-feed:
@@ -92,7 +108,7 @@ jobs:
     needs: [module, installer]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: src
       - uses: actions/download-artifact@v4
@@ -107,14 +123,14 @@ jobs:
           V=${{ needs.module.outputs.version }}
           python3 src/scripts/update-manifest.py feed/manifest.json \
             --version "$V" --target-abi "$TARGET_ABI" \
-            --source-url "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/ReelForge_${V}.0.zip" \
+            --source-url "https://github.com/${{ github.repository }}/releases/download/${TAG}/ReelForge_${V}.0.zip" \
             --checksum "$(cat checksum.txt)" \
-            --changelog "https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}"
+            --changelog "https://github.com/${{ github.repository }}/releases/tag/${TAG}"
       - name: Publish the feed
         working-directory: feed
         run: |
           git config user.name "reelforge-release"
           git config user.email "release@reelforge.stream"
           git add manifest.json
-          git commit -m "Update feed: ${GITHUB_REF_NAME}"
+          git commit -m "Update feed: ${TAG}"
           git push origin update-feed

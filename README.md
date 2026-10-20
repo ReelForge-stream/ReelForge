@@ -35,6 +35,8 @@ New Jellyfin engine versions arrive with a new installer.
 ## Releasing (maintainers)
 
 ```bash
+# on GitHub: Actions → Release → Run workflow → version 0.2.0
+# or from a terminal:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
