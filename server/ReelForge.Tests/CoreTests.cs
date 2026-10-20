@@ -524,3 +524,97 @@ public class NetworkShareTests
         Assert.Equal(string.Empty, ReelForge.Services.Secret.Unprotect(string.Empty));
     }
 }
+
+public class ScanServiceTests
+{
+    private static async Task<ScanStatus> WaitDone(ScanService svc, string id)
+    {
+        for (int i = 0; i < 200; i++)
+        {
+            var s = svc.Get(id)!;
+            if (s.State != ScanState.Running)
+            {
+                return s;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new TimeoutException();
+    }
+
+    [Fact]
+    public async Task Reports_progress_then_returns_the_result()
+    {
+        var svc = new ScanService(NullLogger<ScanService>.Instance);
+        var gate = new TaskCompletionSource();
+        var st = svc.Start("duplicates", "k1", false, async (p, ct) =>
+        {
+            p.Begin("Reading files", 4);
+            p.Step();
+            p.Step();
+            await gate.Task;
+            p.Step(2);
+            return "result";
+        });
+
+        await Task.Delay(50);
+        var mid = svc.Get(st.Id)!;
+        Assert.Equal(ScanState.Running, mid.State);
+        Assert.Equal("Reading files", mid.Phase);
+        Assert.Equal(2, mid.Done);
+        Assert.Equal(4, mid.Total);
+        Assert.Null(mid.Result);
+
+        gate.SetResult();
+        var done = await WaitDone(svc, st.Id);
+        Assert.Equal(ScanState.Done, done.State);
+        Assert.Equal("result", done.Result);
+        Assert.Equal(4, done.Done);
+    }
+
+    [Fact]
+    public async Task Reuses_a_recent_result_unless_fresh_and_rejoins_a_running_scan()
+    {
+        var svc = new ScanService(NullLogger<ScanService>.Instance);
+        int runs = 0;
+        Task<object> Work(ScanProgress p, CancellationToken ct)
+        {
+            Interlocked.Increment(ref runs);
+            return Task.FromResult<object>(runs);
+        }
+
+        var a = svc.Start("spacesaver", "k", false, Work);
+        await WaitDone(svc, a.Id);
+        var b = svc.Start("spacesaver", "k", false, Work);
+        Assert.Equal(a.Id, b.Id);
+        Assert.Equal(1, runs);
+
+        var c = svc.Start("spacesaver", "k", true, Work);
+        Assert.NotEqual(a.Id, c.Id);
+        await WaitDone(svc, c.Id);
+        Assert.Equal(2, runs);
+
+        svc.Invalidate("spacesaver");
+        var d = svc.Start("spacesaver", "k", false, Work);
+        Assert.NotEqual(c.Id, d.Id);
+    }
+
+    [Fact]
+    public async Task Can_be_cancelled_and_reports_failures()
+    {
+        var svc = new ScanService(NullLogger<ScanService>.Instance);
+        var slow = svc.Start("duplicates", "slow", false, async (p, ct) =>
+        {
+            await Task.Delay(5000, ct);
+            return 1;
+        });
+        Assert.True(svc.Cancel(slow.Id));
+        Assert.Equal(ScanState.Cancelled, (await WaitDone(svc, slow.Id)).State);
+
+        var bad = svc.Start("duplicates", "bad", false, (p, ct) => throw new InvalidOperationException("NAS offline"));
+        var s = await WaitDone(svc, bad.Id);
+        Assert.Equal(ScanState.Failed, s.State);
+        Assert.Equal("NAS offline", s.Error);
+    }
+}

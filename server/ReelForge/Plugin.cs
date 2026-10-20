@@ -75,6 +75,7 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<LibraryReader>();
+        serviceCollection.AddSingleton<ScanService>();
         serviceCollection.AddSingleton<HoldingArea>();
         serviceCollection.AddSingleton<EncoderProbe>();
         serviceCollection.AddSingleton<ConversionQueue>();

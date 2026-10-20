@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { bytes } from '../lib/api';
 import { Confirm, useApi, useAsync, useToast } from '../lib/ui';
+import { ScanProgress } from './ScanProgress';
+import { ScanFreshness, useScan } from './useScan';
+import type { SpaceSaverResult } from '../lib/types';
+
+const SAVER_STEPS = ['Listing your library', 'Reading files', 'Estimating savings', 'Checking the graphics card'];
 
 type Kind = '' | 'Movie' | 'Episode';
 const PRESET_NAME = { MaxSavings: 'Smallest files', Balanced: 'Balanced', HighQuality: 'Highest quality' } as const;
@@ -11,7 +16,7 @@ export default function SpaceSaver() {
   const nav = useNavigate();
   const toast = useToast();
   const [kind, setKind] = useState<Kind>('');
-  const scan = useAsync(() => api.mm.spaceSaver(undefined, kind || undefined), [kind]);
+  const scan = useScan<SpaceSaverResult>('spacesaver', kind || undefined);
   const settings = useAsync(() => api.mm.settings(), []);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
@@ -21,7 +26,7 @@ export default function SpaceSaver() {
     setSelected(new Set());
   }, [scan.data]);
 
-  if (scan.error) return <div className="err-box">Couldn’t scan the library: {scan.error}</div>;
+  if (scan.error) return <div className="err-box">Couldn’t scan the library: {scan.error} <button className="link-btn" onClick={scan.rescan}>Try again</button></div>;
   const r = scan.data;
   const cands = r?.Candidates ?? [];
   const chosen = cands.filter((c) => selected.has(c.MediaSourceId));
@@ -83,7 +88,14 @@ export default function SpaceSaver() {
         </div>
       </div>
 
-      {scan.loading && !r && <p className="muted">Scanning…</p>}
+      {scan.running && <ScanProgress title={r ? 'Checking again' : 'Finding files that can shrink'} steps={SAVER_STEPS} status={scan.status} onCancel={scan.cancel} compact={!!r} />}
+      {!scan.running && scan.status?.State === 'Cancelled' && !r && (
+        <div className="empty">
+          <h2>Scan stopped</h2>
+          <button className="btn" onClick={scan.rescan}>Scan again</button>
+        </div>
+      )}
+      {!scan.running && r && <ScanFreshness status={scan.status} running={scan.running} onRescan={scan.rescan} label="Scanned" />}
 
       {r && cands.length === 0 && (
         <div className="empty">

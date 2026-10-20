@@ -266,6 +266,26 @@ function demoSessions() {
   ];
 }
 
+type DemoScan = { id: string; kind: string; key: string; started: number; cancelled: boolean; cancelledAt?: number };
+const demoScans = new Map<string, DemoScan>();
+const demoScansById = new Map<string, DemoScan>();
+function scanStatus(sc: DemoScan, withResult = false) {
+  const steps = sc.kind === 'duplicates' ? ['Listing your library', 'Reading files', 'Comparing titles'] : ['Listing your library', 'Reading files', 'Estimating savings', 'Checking the graphics card'];
+  const t = (Date.now() - sc.started) / 1000;
+  const total = 2847;
+  if (sc.cancelled) return { Id: sc.id, Kind: sc.kind, State: 'Cancelled', Phase: 'Reading files', Done: 0, Total: 0, StartedUtc: new Date(sc.started).toISOString(), FinishedUtc: new Date().toISOString() };
+  let phase = steps[0], done = 0, tot = 0;
+  if (t > 0.8 && t <= 5) { phase = 'Reading files'; tot = total; done = Math.min(total, Math.round(((t - 0.8) / 4.2) * total)); }
+  if (t > 5) { phase = steps[2]; tot = sc.kind === 'duplicates' ? 0 : total; done = Math.min(total, Math.round(((t - 5) / 1.2) * total)); }
+  if (sc.kind !== 'duplicates' && t > 6.2) { phase = steps[3]; tot = 0; }
+  const finished = t > 6.6;
+  return {
+    Id: sc.id, Kind: sc.kind, State: finished ? 'Done' : 'Running', Phase: phase, Done: done, Total: tot, StartedUtc: new Date(sc.started).toISOString(),
+    FinishedUtc: finished ? new Date(sc.started + 6600).toISOString() : null,
+    Result: finished && withResult ? (sc.kind === 'duplicates' ? dupGroups : space) : null,
+  };
+}
+
 async function handle(method: string, path: string, body: unknown): Promise<unknown> {
   await new Promise((r) => setTimeout(r, 120));
   const [p, qs] = path.split('?');
@@ -413,6 +433,26 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
       Queue: { Paused: paused, Waiting: paused ? 'Paused' : null, Queued: jobs.filter((j) => j.Status === 'Queued').length, Running: jobs.filter((j) => j.Status === 'Running').length, SavedBytes: 9.7 * GB },
       Holding: { Count: held.length, Bytes: held.reduce((a, h) => a + h.SizeBytes, 0), Days: settings.HoldingDays },
     };
+  // Background scans: pretend each takes ~6 s, moving through the same steps as the server.
+  if (p === '/ReelForge/Scans' && method === 'POST') {
+    const kind = q.get('kind') ?? 'duplicates';
+    const key = `${kind}|${q.get('mediaKind') ?? ''}`;
+    const prev = demoScans.get(key);
+    if (prev && q.get('fresh') !== 'true') return scanStatus(prev);
+    const scan = { id: `scan-${Date.now()}`, kind, key, started: Date.now(), cancelled: false };
+    demoScans.set(key, scan);
+    demoScansById.set(scan.id, scan);
+    return scanStatus(scan);
+  }
+  if (p.startsWith('/ReelForge/Scans/') && p.endsWith('/Cancel')) {
+    const sc = demoScansById.get(p.split('/')[3]);
+    if (sc) sc.cancelled = true;
+    return undefined;
+  }
+  if (p.startsWith('/ReelForge/Scans/')) {
+    const sc = demoScansById.get(p.split('/')[3]);
+    return sc ? scanStatus(sc, true) : undefined;
+  }
   if (p === '/ReelForge/Duplicates') return dupGroups;
   if (p === '/ReelForge/Duplicates/Remove') {
     const ids = new Set((body as { Files: { MediaSourceId: string }[] }).Files.map((f) => f.MediaSourceId));

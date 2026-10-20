@@ -36,7 +36,7 @@ public sealed class LibraryReader
             .ToList();
 
     /// <summary>Reads every movie and episode file, optionally limited to one library.</summary>
-    public IReadOnlyList<MediaFile> ReadAll(Guid? libraryId = null, MediaKind? kind = null)
+    public IReadOnlyList<MediaFile> ReadAll(Guid? libraryId = null, MediaKind? kind = null, ScanProgress? progress = null, CancellationToken ct = default)
     {
         var types = kind switch
         {
@@ -58,10 +58,15 @@ public sealed class LibraryReader
             query.AncestorIds = [lib];
         }
 
+        progress?.Begin("Listing your library", 0);
+        var items = _library.GetItemList(query);
+        progress?.Begin("Reading files", items.Count);
         var seriesProviders = new Dictionary<Guid, IReadOnlyDictionary<string, string>>();
         var result = new List<MediaFile>();
-        foreach (var item in _library.GetItemList(query))
+        foreach (var item in items)
         {
+            ct.ThrowIfCancellationRequested();
+            progress?.Step();
             if (item is not Video video)
             {
                 continue;

@@ -489,6 +489,13 @@ export class Api {
     restore: (id: string) => this.post(`/ReelForge/Holding/${id}/Restore`),
     purge: (id: string) => this.del(`/ReelForge/Holding/${id}`),
     emptyHolding: () => this.post<{ FreedBytes: number }>('/ReelForge/Holding/EmptyAll'),
+    startScan: <T,>(kind: 'duplicates' | 'spacesaver', o: { mediaKind?: string; fresh?: boolean } = {}) => {
+      const q = new URLSearchParams({ kind, fresh: String(!!o.fresh) });
+      if (o.mediaKind) q.set('mediaKind', o.mediaKind);
+      return this.post<ScanStatus<T>>(`/ReelForge/Scans?${q}`);
+    },
+    scan: <T,>(id: string) => this.get<ScanStatus<T>>(`/ReelForge/Scans/${id}`),
+    cancelScan: (id: string) => this.post(`/ReelForge/Scans/${id}/Cancel`),
     settings: () => this.get<Settings>('/ReelForge/Settings'),
     saveSettings: (s: Settings) => this.post<Settings>('/ReelForge/Settings', s),
     enableStreamingGpu: () => this.post('/ReelForge/Gpu/EnableStreamingAcceleration'),
@@ -505,6 +512,19 @@ export interface MatchResult {
   Overview?: string;
   ProviderIds?: Record<string, string>;
   [k: string]: unknown;
+}
+
+export interface ScanStatus<T> {
+  Id: string;
+  Kind: string;
+  State: 'Running' | 'Done' | 'Failed' | 'Cancelled';
+  Phase: string;
+  Done: number;
+  Total: number;
+  StartedUtc: string;
+  FinishedUtc?: string | null;
+  Error?: string | null;
+  Result?: T | null;
 }
 
 export type ImageKind = 'Primary' | 'Thumb' | 'Backdrop' | 'Logo';

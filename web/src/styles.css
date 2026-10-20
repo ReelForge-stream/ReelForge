@@ -995,3 +995,26 @@ code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-siz
   .az-bar button { font-size: 10px; }
 }
 .browse { overflow-anchor: none; }
+
+/* ---------- scan progress ---------- */
+
+.scan-card { display: grid; gap: 14px; max-width: 760px; padding: 22px 24px; border-radius: var(--radius); background: var(--surface); margin-bottom: 28px; }
+.scan-card.compact { padding: 16px 18px; gap: 10px; }
+.scan-card.compact .scan-steps { display: none; }
+.scan-top { display: flex; align-items: center; gap: 14px; }
+.scan-titles { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.scan-titles strong { font-size: 1.05rem; }
+.scan-bar { position: relative; height: 10px; border-radius: 5px; background: var(--deep); overflow: hidden; }
+.scan-bar span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: linear-gradient(90deg, #FF9C3D, var(--ember)); transition: width 500ms ease; }
+.scan-bar.indeterminate span { width: 30%; animation: slide 1.3s ease-in-out infinite; }
+@keyframes slide { 0% { left: -30%; } 100% { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .scan-bar.indeterminate span { animation: none; width: 100%; opacity: 0.4; } }
+.scan-meta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; color: #C3CDD6; font-variant-numeric: tabular-nums; }
+.scan-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; color: var(--muted); counter-reset: s; }
+.scan-steps li { display: flex; align-items: center; gap: 7px; counter-increment: s; }
+.scan-steps li::before { content: counter(s); display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line); font-size: 0.72rem; font-weight: 700; }
+.scan-steps li.now { color: var(--fg); }
+.scan-steps li.now::before { border-color: var(--ember); color: var(--ember); }
+.scan-steps li.done::before { content: '✓'; background: var(--surface-2); border-color: var(--surface-2); color: var(--coolant); }
+.scan-fresh { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.88rem; margin: 0 0 18px; }
+.scan-fresh .link-btn { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; font-size: 0.88rem; }

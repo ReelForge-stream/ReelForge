@@ -2,13 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { bytes } from '../lib/api';
 import type { DupGroup } from '../lib/types';
 import { Confirm, useApi, useAsync, useToast } from '../lib/ui';
+import { ScanProgress } from './ScanProgress';
+import { ScanFreshness, useScan } from './useScan';
+
+const DUP_STEPS = ['Listing your library', 'Reading files', 'Comparing titles'];
 
 type Filter = 'All' | 'Movie' | 'Episode';
 
 export default function Duplicates() {
   const api = useApi();
   const toast = useToast();
-  const groups = useAsync(() => api.mm.duplicates(), []);
+  const scan = useScan<DupGroup[]>('duplicates');
+  const groups = { data: scan.data, error: scan.error, reload: scan.rescan };
   const settings = useAsync(() => api.mm.settings(), []);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>('All');
@@ -58,11 +63,24 @@ export default function Duplicates() {
     }
   };
 
-  if (groups.error) return <div className="err-box">Couldn’t check for duplicates: {groups.error}</div>;
-  if (!groups.data) return <p className="muted">Comparing every movie and episode in your libraries…</p>;
+  if (groups.error) return <div className="err-box">Couldn’t check for duplicates: {groups.error} <button className="link-btn" onClick={scan.rescan}>Try again</button></div>;
+  if (scan.status?.State === 'Cancelled' && !groups.data)
+    return (
+      <div className="empty">
+        <h2>Scan stopped</h2>
+        <button className="btn" onClick={scan.rescan}>Look for duplicates</button>
+      </div>
+    );
+  if (!groups.data) return <ScanProgress title="Looking for duplicates" steps={DUP_STEPS} status={scan.status} onCancel={scan.cancel} />;
+  const progressOrFresh = scan.running ? (
+    <ScanProgress title="Checking again" steps={DUP_STEPS} status={scan.status} onCancel={scan.cancel} compact />
+  ) : (
+    <ScanFreshness status={scan.status} running={scan.running} onRescan={scan.rescan} label="Checked" />
+  );
   if (groups.data.length === 0)
     return (
       <div className="empty">
+        {progressOrFresh}
         <h2>No duplicates</h2>
         <p className="muted">Every movie and episode has exactly one copy on disk.</p>
       </div>
@@ -73,6 +91,7 @@ export default function Duplicates() {
 
   return (
     <>
+      {progressOrFresh}
       <div style={{ marginBottom: 28 }}>
         <div className="figure">{bytes(reclaimable)}</div>
         <p className="figure-label">

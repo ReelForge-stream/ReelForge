@@ -72,6 +72,7 @@ public sealed class MediaManagerController : ControllerBase
     private readonly EncoderProbe _probe;
     private readonly ILibraryManager _library;
     private readonly IServerConfigurationManager _serverConfig;
+    private readonly ScanService _scans;
 
     public MediaManagerController(
         LibraryReader reader,
@@ -79,8 +80,10 @@ public sealed class MediaManagerController : ControllerBase
         ConversionQueue queue,
         EncoderProbe probe,
         ILibraryManager library,
-        IServerConfigurationManager serverConfig)
+        IServerConfigurationManager serverConfig,
+        ScanService scans)
     {
+        _scans = scans;
         _reader = reader;
         _holding = holding;
         _queue = queue;
@@ -118,10 +121,15 @@ public sealed class MediaManagerController : ControllerBase
     // ---------------- Duplicates ----------------
 
     [HttpGet("Duplicates")]
-    public ActionResult<IReadOnlyList<DuplicateGroupDto>> Duplicates([FromQuery] Guid? libraryId)
+    public ActionResult<IReadOnlyList<DuplicateGroupDto>> Duplicates([FromQuery] Guid? libraryId) =>
+        Ok(FindDuplicates(_reader, libraryId, null, CancellationToken.None));
+
+    private static IReadOnlyList<DuplicateGroupDto> FindDuplicates(LibraryReader reader, Guid? libraryId, ScanProgress? progress, CancellationToken ct)
     {
-        var groups = DuplicateFinder.Find(_reader.ReadAll(libraryId));
-        return Ok(groups.Select(g => new DuplicateGroupDto(
+        var files = reader.ReadAll(libraryId, null, progress, ct);
+        progress?.Begin("Comparing titles", 0);
+        var groups = DuplicateFinder.Find(files);
+        return groups.Select(g => new DuplicateGroupDto(
             g.Key,
             g.Kind.ToString(),
             g.Title,
@@ -137,7 +145,7 @@ public sealed class MediaManagerController : ControllerBase
                 f.Summary,
                 f.Score,
                 f.RecommendedKeep,
-                f.Edition)).ToList())).ToList());
+                f.Edition)).ToList())).ToList();
     }
 
     /// <summary>
@@ -148,6 +156,8 @@ public sealed class MediaManagerController : ControllerBase
     [HttpPost("Duplicates/Remove")]
     public ActionResult<object> RemoveDuplicates([FromBody] FileListRequest request)
     {
+        _scans.Invalidate("duplicates");
+        _scans.Invalidate("spacesaver");
         var groups = DuplicateFinder.Find(_reader.ReadAll());
         var wanted = request.Files.Select(f => f.MediaSourceId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var removed = new List<string>();
@@ -195,18 +205,29 @@ public sealed class MediaManagerController : ControllerBase
     // ---------------- Space Saver ----------------
 
     [HttpGet("SpaceSaver")]
-    public async Task<ActionResult<SpaceSaverResult>> SpaceSaver([FromQuery] Guid? libraryId, [FromQuery] MediaKind? kind, CancellationToken ct)
+    public async Task<ActionResult<SpaceSaverResult>> SpaceSaver([FromQuery] Guid? libraryId, [FromQuery] MediaKind? kind, CancellationToken ct) =>
+        Ok(await EstimateSavings(_reader, _probe, libraryId, kind, null, ct).ConfigureAwait(false));
+
+    private static async Task<SpaceSaverResult> EstimateSavings(LibraryReader reader, EncoderProbe probe, Guid? libraryId, MediaKind? kind, ScanProgress? progress, CancellationToken ct)
     {
         var settings = Config.ToSettings();
-        var files = _reader.ReadAll(libraryId, kind)
+        var files = reader.ReadAll(libraryId, kind, progress, ct)
             .GroupBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToList();
-        var estimates = files.Select(f => SpaceSaverEstimator.Estimate(f, settings)).ToList();
-        var candidates = estimates.Where(e => e.IsCandidate).OrderByDescending(e => e.SavingsBytes).ToList();
+        progress?.Begin("Estimating savings", files.Count);
+        var estimates = new List<SpaceSaverEstimate>(files.Count);
+        foreach (var f in files)
+        {
+            ct.ThrowIfCancellationRequested();
+            estimates.Add(SpaceSaverEstimator.Estimate(f, settings));
+            progress?.Step();
+        }
 
-        var report = await _probe.GetAsync(ct: ct).ConfigureAwait(false);
-        return Ok(new SpaceSaverResult(
+        var candidates = estimates.Where(e => e.IsCandidate).OrderByDescending(e => e.SavingsBytes).ToList();
+        progress?.Begin("Checking the graphics card", 0);
+        var report = await probe.GetAsync(ct: ct).ConfigureAwait(false);
+        return new SpaceSaverResult(
             candidates.Select(e => new EstimateDto(
                 e.File.ItemId,
                 e.File.MediaSourceId,
@@ -223,12 +244,41 @@ public sealed class MediaManagerController : ControllerBase
             candidates.Sum(c => c.File.SizeBytes),
             files.Count,
             estimates.Where(e => !e.IsCandidate).GroupBy(e => e.Reason).ToDictionary(g => g.Key, g => g.Count()),
-            report));
+            report);
     }
 
+    // ---------------- Background scans with progress ----------------
+
+    /// <summary>
+    /// Starts (or rejoins) a duplicate or space-saver scan. Poll <c>Scans/{id}</c> for progress; the
+    /// result is included once it's done. A recent result is reused unless <paramref name="fresh"/>.
+    /// </summary>
+    [HttpPost("Scans")]
+    public ActionResult<ScanStatus> StartScan([FromQuery, Required] string kind, [FromQuery] Guid? libraryId, [FromQuery] MediaKind? mediaKind, [FromQuery] bool fresh = false)
+    {
+        var reader = _reader;
+        var probe = _probe;
+        string key = $"{kind}|{libraryId}|{mediaKind}";
+        return kind.ToLowerInvariant() switch
+        {
+            "duplicates" => Ok(_scans.Start("duplicates", key, fresh, (p, ct) => Task.FromResult<object>(FindDuplicates(reader, libraryId, p, ct)))),
+            "spacesaver" => Ok(_scans.Start("spacesaver", key, fresh, async (p, ct) => await EstimateSavings(reader, probe, libraryId, mediaKind, p, ct).ConfigureAwait(false))),
+            _ => BadRequest(new { error = "kind must be duplicates or spacesaver" }),
+        };
+    }
+
+    [HttpGet("Scans/{id}")]
+    public ActionResult<ScanStatus> GetScan([FromRoute] string id) => _scans.Get(id) is { } s ? Ok(s) : NotFound();
+
+    [HttpPost("Scans/{id}/Cancel")]
+    public ActionResult CancelScan([FromRoute] string id) => _scans.Cancel(id) ? NoContent() : NotFound();
+
     [HttpPost("SpaceSaver/Queue")]
-    public ActionResult<IReadOnlyList<ConversionJob>> Queue([FromBody] FileListRequest request) =>
-        Ok(_queue.Enqueue(request.Files.Select(f => (f.ItemId, f.MediaSourceId))));
+    public ActionResult<IReadOnlyList<ConversionJob>> Queue([FromBody] FileListRequest request)
+    {
+        _scans.Invalidate("spacesaver");
+        return Ok(_queue.Enqueue(request.Files.Select(f => (f.ItemId, f.MediaSourceId))));
+    }
 
     [HttpGet("Jobs")]
     public ActionResult<object> Jobs() => Ok(new { Paused = _queue.Paused, Waiting = _queue.WaitingReason, Jobs = _queue.List() });
@@ -257,6 +307,7 @@ public sealed class MediaManagerController : ControllerBase
         try
         {
             _holding.Restore(id);
+            _scans.Invalidate("duplicates");
             _library.QueueLibraryScan();
             return NoContent();
         }
