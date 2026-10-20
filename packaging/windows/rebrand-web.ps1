@@ -55,3 +55,29 @@ if (Test-Path $manifest) {
 }
 
 Write-Host "Rebranded the admin dashboard: $replaced images replaced, title and manifest updated."
+
+# --- The engine's startup page ("... started successfully. Redirecting in 5") ------------------
+# It lives next to the server (ServerSetupApp\index.mstemplate.html), not in jellyfin-web.
+# Only visible text, the logo and colours change; {{template}} placeholders are untouched.
+$setupPage = Join-Path (Split-Path -Parent $WebDir) 'ServerSetupApp\index.mstemplate.html'
+if (Test-Path -LiteralPath $setupPage) {
+    $page = [IO.File]::ReadAllText($setupPage)
+    $logo = [IO.File]::ReadAllText((Join-Path (Split-Path -Parent $OverridesDir) 'logo-horizontal.svg'))
+    $logo = $logo -replace '^<svg ', '<svg class="logo" role="img" aria-label="ReelForge" '
+    $before = $page
+    $page = [regex]::Replace($page, '<svg class="logo"[\s\S]*?</svg>', [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $logo }, 1)
+    $page = $page -replace '(?s)(<title>.*?)Jellyfin(\s*</title>)', '${1}ReelForge${2}'
+    $page = $page.Replace('Jellyfin is still starting.', 'ReelForge is still starting.')
+    $page = $page.Replace('Jellyfin has encountered an error and was not able to start.', 'ReelForge ran into an error and couldn''t start.')
+    $page = $page.Replace("'Jellyfin started successfully.'", "'ReelForge started successfully.'")
+    $page = $page.Replace("'Continue to Jellyfin'", "'Continue to ReelForge'")
+    $page = $page.Replace('--jf-background: #101010;', '--jf-background: #17202A;')
+    $page = $page.Replace('--jf-paper: #202020;', '--jf-paper: #212C38;')
+    $page = $page.Replace('--jf-primary: #00a4dc;', '--jf-primary: #FF8A1F;')
+    $page = $page.Replace('--jf-primary-dark: #00729a;', '--jf-primary-dark: #E06F0A;')
+    if ($page -eq $before) { Write-Warning 'Startup page layout changed; nothing rebranded there.' }
+    [IO.File]::WriteAllText($setupPage, $page)
+    Write-Host 'Rebranded the startup page.'
+} else {
+    Write-Warning "No startup page found at $setupPage"
+}
