@@ -146,6 +146,10 @@ class JellyfinApi(
     suspend fun episodes(seriesId: String, seasonId: String): List<Item> =
         get<ItemsResult>("/Shows/$seriesId/Episodes?userId=$uid&seasonId=$seasonId&fields=Overview").Items
 
+    /** Every episode of a show in order (to carry on into the next season). */
+    suspend fun allEpisodes(seriesId: String): List<Item> =
+        get<ItemsResult>("/Shows/$seriesId/Episodes?userId=$uid&fields=Overview").Items
+
     suspend fun similar(id: String): List<Item> = get<ItemsResult>("/Items/$id/Similar?userId=$uid&limit=12&fields=$FIELDS").Items
 
     suspend fun setFavorite(id: String, fav: Boolean) {

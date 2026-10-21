@@ -248,6 +248,11 @@ export class Api {
     return this.get<{ Items: Item[] }>(`/Shows/${seriesId}/Episodes?userId=${this.userId}&seasonId=${seasonId}&fields=Overview`).then((r) => r.Items);
   }
 
+  /** Every episode of a show in order (to carry on into the next season). */
+  allEpisodes(seriesId: string) {
+    return this.get<{ Items: Item[] }>(`/Shows/${seriesId}/Episodes?userId=${this.userId}&fields=Overview`).then((r) => r.Items);
+  }
+
   markPlayed(id: string, played: boolean) {
     return played ? this.post(`/UserPlayedItems/${id}?userId=${this.userId}`) : this.del(`/UserPlayedItems/${id}?userId=${this.userId}`);
   }

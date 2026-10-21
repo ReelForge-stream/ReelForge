@@ -1122,3 +1122,20 @@ code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-siz
   .rotator .billboard-art, .rotator .billboard-copy { animation: none; }
   .rot-dots button.on.run span { animation: none; width: 100%; }
 }
+
+/* ---------- Autoplay ---------- */
+.up-next { position: absolute; right: 32px; bottom: 120px; z-index: 6; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 16px; align-items: center; width: min(520px, calc(100% - 32px)); padding: 14px; border-radius: var(--radius); background: rgba(18, 25, 34, 0.92); border: 1px solid var(--line); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5); animation: rise-in 250ms ease; }
+.up-next-art { aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: var(--surface); }
+.up-next-art img, .up-next-art .art-gen { width: 100%; height: 100%; object-fit: cover; }
+.up-next-text { display: grid; gap: 6px; min-width: 0; }
+.up-next-kicker { color: var(--ember); font-weight: 600; font-size: 14px; }
+.up-next-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-next-actions { display: flex; gap: 8px; margin-top: 4px; }
+.up-next-actions svg { width: 16px; height: 16px; }
+.still-watching { position: absolute; inset: 0; z-index: 7; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 24px; text-align: center; background: rgba(12, 17, 23, 0.88); }
+.still-watching h1 { font-size: clamp(1.8rem, 4vw, 3rem); max-width: 18ch; }
+.still-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 10px; }
+@media (max-width: 600px) {
+  .up-next { right: 16px; bottom: 96px; grid-template-columns: 1fr; }
+  .up-next-art { display: none; }
+}

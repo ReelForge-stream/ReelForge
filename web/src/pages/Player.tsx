@@ -1,9 +1,10 @@
 import Hls from 'hls.js';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { isDemo, maxBitrate, type PlaybackReport } from '../lib/api';
 import type { Item, MediaSource, MediaStream, TranscodingInfo } from '../lib/types';
-import { Icon, epCode, useApi } from '../lib/ui';
+import { Art, Icon, epCode, useApi } from '../lib/ui';
+import { atEnd, chain, describePrefs, loadPrefs, savePrefs, setChain, showUpNext, type AutoplayPrefs } from '../lib/autoplay';
 
 const TICKS = 10_000_000;
 
@@ -31,7 +32,7 @@ interface StreamOpts {
   bitrate: number;
 }
 
-type Panel = null | 'main' | 'subs' | 'audio' | 'quality' | 'speed' | 'info';
+type Panel = null | 'main' | 'subs' | 'audio' | 'quality' | 'speed' | 'info' | 'autoplay';
 
 function savedBitrate(): number {
   const b = maxBitrate();
@@ -58,6 +59,7 @@ export default function Player() {
   const fromStart = params.get('from') === 'start';
   const api = useApi();
   const nav = useNavigate();
+  const location = useLocation();
   const video = useRef<HTMLVideoElement>(null);
   const root = useRef<HTMLDivElement>(null);
 
@@ -85,6 +87,28 @@ export default function Player() {
   const [subSize, setSubSize] = useState(() => load('reelforge.subSize', 'm'));
   const [panel, setPanel] = useState<Panel>(null);
   const [lingered, setLingered] = useState(false); // paused for a while: show the "You're watching" screen
+  // ---------- autoplay ----------
+  const [prefs, setPrefs] = useState<AutoplayPrefs>(loadPrefs);
+  const [dismissed, setDismissed] = useState(false); // closed the "Next episode" card: don't roll on
+  const [asking, setAsking] = useState(false); // "Still watching?"
+  // Episodes in a row that started by themselves. Started by hand: back to zero.
+  const autoSoFar = useRef(0);
+  useEffect(() => {
+    const auto = !!(location.state as { autoplay?: boolean } | null)?.autoplay;
+    if (!auto) setChain(0);
+    autoSoFar.current = auto ? chain() : 0;
+    setDismissed(false);
+    setAsking(false);
+  }, [id, location.state]);
+  // Any key press or click means someone's there.
+  const touched = useCallback(() => {
+    autoSoFar.current = 0;
+    setChain(0);
+  }, []);
+  const changePrefs = (p: AutoplayPrefs) => {
+    setPrefs(p);
+    savePrefs(p);
+  };
 
   // ---------- controls auto-hide ----------
   const wakeTimer = useRef(0);
@@ -135,7 +159,14 @@ export default function Player() {
         if (it.Type === 'Episode' && it.SeriesId && it.SeasonId) {
           api
             .episodes(it.SeriesId, it.SeasonId)
-            .then((eps) => live && setNext(eps.find((e) => (e.IndexNumber ?? 0) > (it.IndexNumber ?? 0)) ?? null))
+            .then(async (eps) => {
+              const inSeason = eps.find((e) => (e.IndexNumber ?? 0) > (it.IndexNumber ?? 0));
+              if (inSeason) return live && setNext(inSeason);
+              // Last episode of the season: carry on with the next season.
+              const all = await api.allEpisodes(it.SeriesId!);
+              const at = all.findIndex((e) => e.Id === it.Id);
+              if (live) setNext(at >= 0 ? all[at + 1] ?? null : null);
+            })
             .catch(() => undefined);
         } else setNext(null);
       })
@@ -337,6 +368,8 @@ export default function Player() {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       wake();
+      touched();
+      if (asking && e.key !== 'Escape') return; // "Still watching?" has its own buttons
       if (e.key === ' ' || e.key === 'k') {
         e.preventDefault();
         toggle();
@@ -378,12 +411,19 @@ export default function Player() {
   const qualities = QUALITIES.filter((q, n) => n === 0 || !srcBitrate || q.bps < srcBitrate);
 
   return (
-    <div ref={root} className={`player subs-${subSize}${showChrome ? '' : ' idle'}${lingered ? ' lingered' : ''}`}>
+    <div ref={root} className={`player subs-${subSize}${showChrome ? '' : ' idle'}${lingered ? ' lingered' : ''}`} onPointerDown={touched}>
       <video
         ref={video}
         playsInline
         crossOrigin="anonymous"
-        onEnded={() => (next ? nav(`/play/${next.Id}`, { replace: true }) : nav(-1))}
+        onEnded={() => {
+          const action = atEnd(prefs, autoSoFar.current, !!next, dismissed);
+          if (action === 'next' && next) {
+            setChain(autoSoFar.current + 1);
+            nav(`/play/${next.Id}`, { replace: true, state: { autoplay: true } });
+          } else if (action === 'ask') setAsking(true);
+          else nav(-1);
+        }}
         onClick={toggle}
         onDoubleClick={toggleFull}
         onPlay={() => setPaused(false)}
@@ -426,6 +466,39 @@ export default function Player() {
 
       {error && !lingered && <p className="player-notice" role="alert">{error}</p>}
 
+      {next && !asking && showUpNext(prefs, autoSoFar.current, true, dismissed, time, duration) && (
+        <div className="up-next" role="status" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="up-next-art"><Art item={next} kind="Primary" width={320} /></div>
+          <div className="up-next-text">
+            <span className="up-next-kicker">Next episode in {Math.max(0, Math.ceil(duration - time))}</span>
+            <strong>{epCode(next).replace(/^S0?(\d+)E0?(\d+)$/, 'S$1:E$2')} · {next.Name}</strong>
+            <div className="up-next-actions">
+              <button className="btn primary sm" onClick={() => nav(`/play/${next.Id}`, { replace: true })}>
+                <Icon.play />
+                Play now
+              </button>
+              <button className="btn ghost sm" onClick={() => setDismissed(true)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {asking && item && (
+        <div className="still-watching" role="dialog" aria-modal="true" aria-labelledby="sw-title">
+          <h1 id="sw-title">Are you still watching{isEp ? ` ${heading}` : ''}?</h1>
+          {next && <p className="muted">Up next: {epCode(next).replace(/^S0?(\d+)E0?(\d+)$/, 'S$1:E$2')} · {next.Name}</p>}
+          <div className="still-actions">
+            {next && (
+              <button className="btn primary" autoFocus onClick={() => nav(`/play/${next.Id}`, { replace: true })}>
+                <Icon.play />
+                Continue watching
+              </button>
+            )}
+            <button className="btn ghost" onClick={() => (item.SeriesId ? nav(`/item/${item.SeriesId}`, { replace: true }) : nav(-1))}>Back to the show</button>
+          </div>
+        </div>
+      )}
+
       {panel && (
         <div className="pc-panel" role="dialog" aria-label="Playback settings" onPointerDown={(e) => e.stopPropagation()}>
           {panel === 'main' && (
@@ -435,8 +508,20 @@ export default function Player() {
               <Row label="Audio" value={audioLabel} onClick={() => setPanel('audio')} disabled={audioTracks.length < 2} />
               <Row label="Quality" value={quality.bps === QUALITIES[0].bps ? 'Original' : `${quality.label} · ${quality.sub}`} onClick={() => setPanel('quality')} />
               <Row label="Speed" value={speed === 1 ? 'Normal' : `${speed}×`} onClick={() => setPanel('speed')} />
+              {isEp && <Row label="Autoplay next episode" value={describePrefs(prefs)} onClick={() => setPanel('autoplay')} />}
               <Row label="Playback info" value={methodLabel(method)} onClick={() => setPanel('info')} />
             </>
+          )}
+          {panel === 'autoplay' && (
+            <Sub title="Autoplay next episode" onBack={() => setPanel('main')}>
+              <Choice on={!prefs.on} onClick={() => changePrefs({ ...prefs, on: false })}>Off</Choice>
+              {[1, 2, 3, 5].map((n) => (
+                <Choice key={n} on={prefs.on && prefs.askAfter === n} onClick={() => changePrefs({ on: true, askAfter: n })} note={n === 2 ? 'Recommended' : undefined}>
+                  On · ask “Still watching?” after {n} episode{n > 1 ? 's' : ''}
+                </Choice>
+              ))}
+              <Choice on={prefs.on && prefs.askAfter === 0} onClick={() => changePrefs({ on: true, askAfter: 0 })}>On · never ask</Choice>
+            </Sub>
           )}
           {panel === 'subs' && (
             <Sub title="Subtitles" onBack={() => setPanel('main')}>

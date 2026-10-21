@@ -82,12 +82,17 @@ fun AppRoot() {
         composable("details/{id}") { e ->
             DetailsScreen(e.arguments!!.getString("id")!!, onPlay = { i, fromStart -> play(i, fromStart) }, onOpen = ::open)
         }
-        composable("play/{id}?start={start}", listOf(navArgument("start") { type = NavType.BoolType; defaultValue = false })) { e ->
+        composable(
+            "play/{id}?start={start}&auto={auto}",
+            listOf(navArgument("start") { type = NavType.BoolType; defaultValue = false }, navArgument("auto") { type = NavType.BoolType; defaultValue = false }),
+        ) { e ->
             PlayerScreen(
                 e.arguments!!.getString("id")!!,
                 e.arguments!!.getBoolean("start"),
+                e.arguments!!.getBoolean("auto"),
                 onExit = { nav.popBackStack() },
-                onNext = { n -> nav.navigate("play/${n.Id}?start=true") { popUpTo("play/{id}?start={start}") { inclusive = true } } },
+                onNext = { n, auto -> nav.navigate("play/${n.Id}?start=true&auto=$auto") { popUpTo("play/{id}?start={start}&auto={auto}") { inclusive = true } } },
+                onShow = { seriesId -> nav.navigate("details/$seriesId") { popUpTo("play/{id}?start={start}&auto={auto}") { inclusive = true } } },
             )
         }
     }

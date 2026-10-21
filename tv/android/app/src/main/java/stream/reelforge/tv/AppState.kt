@@ -24,6 +24,9 @@ class AppState(private val context: Context) {
 
     private var titleCache: Pair<Long, List<Item>>? = null
 
+    /** Episodes in a row that started by themselves with nobody pressing a button. */
+    var autoPlayed = 0
+
     suspend fun restore(): Session? {
         val s = store.load() ?: return null
         api = JellyfinApi(s.server, store.deviceId(), BuildConfig.VERSION_NAME, s.token, s.userId)

@@ -27,6 +27,7 @@ import stream.reelforge.tv.appState
 import stream.reelforge.tv.data.Updater
 import stream.reelforge.tv.ui.components.PrimaryButton
 import stream.reelforge.tv.ui.components.SecondaryButton
+import stream.reelforge.tv.data.Autoplay
 import stream.reelforge.tv.ui.theme.RF
 
 private val QUALITIES = listOf(
@@ -50,6 +51,8 @@ fun SettingsContent(onSignedOut: () -> Unit, onSwitchProfile: () -> Unit) {
     var progress by remember { mutableStateOf<Float?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { bitrate = state.store.maxBitrate() }
+    val context = LocalContext.current
+    var autoplay by remember { mutableStateOf(Autoplay.load(context)) }
 
     Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 28.dp, end = 48.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Settings", style = MaterialTheme.typography.displaySmall, color = RF.Fg)
@@ -67,6 +70,15 @@ fun SettingsContent(onSignedOut: () -> Unit, onSwitchProfile: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             QUALITIES.forEach { (bps, label) ->
                 if (bps == bitrate) PrimaryButton(label) {} else SecondaryButton(label) { bitrate = bps; scope.launch { state.store.setMaxBitrate(bps) } }
+            }
+        }
+
+        Section("Autoplay next episode")
+        Text("Plays the next episode by itself. After a few in a row with no buttons pressed, it stops and asks “Are you still watching?”", color = RF.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(720.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf(Autoplay.Prefs(false, autoplay.askAfter) to "Off", Autoplay.Prefs(true, 1) to "Ask after 1", Autoplay.Prefs(true, 2) to "Ask after 2", Autoplay.Prefs(true, 3) to "Ask after 3", Autoplay.Prefs(true, 0) to "Never ask").forEach { (p, label) ->
+                val on = if (!p.on) !autoplay.on else autoplay.on && autoplay.askAfter == p.askAfter
+                if (on) PrimaryButton(label) {} else SecondaryButton(label) { autoplay = p; Autoplay.save(context, p) }
             }
         }
 

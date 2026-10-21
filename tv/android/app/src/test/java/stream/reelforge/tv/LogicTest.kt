@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import stream.reelforge.tv.data.Autoplay
 import stream.reelforge.tv.data.DeviceProfile
 import stream.reelforge.tv.data.Discovery
 import stream.reelforge.tv.data.Fuzzy
@@ -68,5 +69,19 @@ class LogicTest {
         assertEquals("hls", tx["Protocol"]!!.jsonPrimitive.content)
         assertEquals("hevc,h264", tx["VideoCodec"]!!.jsonPrimitive.content)
         assertEquals("aac,ac3,eac3", tx["AudioCodec"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun autoplay_plays_two_by_itself_then_asks() {
+        val p = Autoplay.Prefs()
+        assertEquals(Autoplay.End.NEXT, Autoplay.atEnd(p, 0, true, false))
+        assertEquals(Autoplay.End.NEXT, Autoplay.atEnd(p, 1, true, false))
+        assertEquals(Autoplay.End.ASK, Autoplay.atEnd(p, 2, true, false))
+        assertEquals(Autoplay.End.STOP, Autoplay.atEnd(p, 0, false, false))
+        assertEquals(Autoplay.End.STOP, Autoplay.atEnd(p, 0, true, true))
+        assertEquals(Autoplay.End.NEXT, Autoplay.atEnd(Autoplay.Prefs(true, 0), 9, true, false))
+        assertTrue(Autoplay.showUpNext(p, 0, true, false, 1310, 1320))
+        assertFalse(Autoplay.showUpNext(p, 2, true, false, 1310, 1320))
+        assertFalse(Autoplay.showUpNext(p, 0, true, false, 1200, 1320))
     }
 }

@@ -11,7 +11,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import coil3.compose.AsyncImage
+import stream.reelforge.tv.data.Autoplay
+import stream.reelforge.tv.ui.components.Icons
+import stream.reelforge.tv.ui.components.PrimaryButton
+import stream.reelforge.tv.ui.components.SecondaryButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +76,7 @@ private const val TICKS = 10_000L // ticks per millisecond
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun PlayerScreen(id: String, fromStart: Boolean, onExit: () -> Unit, onNext: (Item) -> Unit) {
+fun PlayerScreen(id: String, fromStart: Boolean, auto: Boolean, onExit: () -> Unit, onNext: (Item, Boolean) -> Unit, onShow: (String) -> Unit) {
     val context = LocalContext.current
     val state = context.appState
     val api = state.api ?: return
@@ -71,6 +88,14 @@ fun PlayerScreen(id: String, fromStart: Boolean, onExit: () -> Unit, onNext: (It
     var session by remember { mutableStateOf<Triple<MediaSource, String?, Boolean>?>(null) } // source, playSessionId, converted
     var next by remember { mutableStateOf<Item?>(null) }
     var resumeMs by remember { mutableStateOf<Long?>(null) }
+    // Autoplay: started by hand resets the count of episodes that played by themselves.
+    val prefs = remember { Autoplay.load(context) }
+    remember(id) { if (!auto) state.autoPlayed = 0; 0 }
+    var dismissed by remember(id) { mutableStateOf(false) }
+    var asking by remember(id) { mutableStateOf(false) }
+    var positionSec by remember { mutableLongStateOf(0L) }
+    var durationSec by remember { mutableLongStateOf(0L) }
+    val touched = { state.autoPlayed = 0 }
 
     val player = remember {
         ExoPlayer.Builder(context)
@@ -98,7 +123,10 @@ fun PlayerScreen(id: String, fromStart: Boolean, onExit: () -> Unit, onNext: (It
         try {
             val it = item ?: api.item(id).also { i -> item = i }
             if (it.isEpisode && it.SeriesId != null && it.SeasonId != null) {
-                next = runCatching { api.episodes(it.SeriesId, it.SeasonId).firstOrNull { e -> (e.IndexNumber ?: 0) > (it.IndexNumber ?: 0) } }.getOrNull()
+                next = runCatching {
+                    api.episodes(it.SeriesId, it.SeasonId).firstOrNull { e -> (e.IndexNumber ?: 0) > (it.IndexNumber ?: 0) }
+                        ?: api.allEpisodes(it.SeriesId).let { all -> all.getOrNull(all.indexOfFirst { e -> e.Id == it.Id } + 1).takeIf { _ -> all.any { e -> e.Id == it.Id } } }
+                }.getOrNull()
             }
             val startMs = resumeMs ?: if (fromStart) 0L else (it.UserData?.PlaybackPositionTicks ?: 0L) / TICKS
             val bitrate = state.store.maxBitrate()
@@ -133,6 +161,15 @@ fun PlayerScreen(id: String, fromStart: Boolean, onExit: () -> Unit, onNext: (It
         }
     }
 
+    // Where we are, for the "Next episode in 12" card.
+    LaunchedEffect(session) {
+        while (isActive && session != null) {
+            positionSec = player.currentPosition / 1000
+            durationSec = player.duration.takeIf { it > 0 }?.div(1000) ?: 0
+            delay(500)
+        }
+    }
+
     // Progress every 10 seconds, so Continue Watching and other devices know where you are.
     LaunchedEffect(session) {
         while (isActive && session != null) {
@@ -146,7 +183,14 @@ fun PlayerScreen(id: String, fromStart: Boolean, onExit: () -> Unit, onNext: (It
             override fun onPlaybackStateChanged(s: Int) {
                 if (s == Player.STATE_ENDED) {
                     report()?.let { r -> scope.launch { api.reportStopped(r) } }
-                    next?.let(onNext) ?: onExit()
+                    when (Autoplay.atEnd(prefs, state.autoPlayed, next != null, dismissed)) {
+                        Autoplay.End.NEXT -> {
+                            state.autoPlayed += 1
+                            onNext(next!!, true)
+                        }
+                        Autoplay.End.ASK -> asking = true
+                        Autoplay.End.STOP -> onExit()
+                    }
                 }
             }
 
@@ -174,7 +218,11 @@ fun PlayerScreen(id: String, fromStart: Boolean, onExit: () -> Unit, onNext: (It
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    val upNext = next != null && !asking && Autoplay.showUpNext(prefs, state.autoPlayed, next != null, dismissed, positionSec, durationSec)
+    BackHandler(enabled = upNext) { dismissed = true }
+    BackHandler(enabled = asking) { item?.SeriesId?.let(onShow) ?: onExit() }
+
+    Box(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { touched(); false }) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
@@ -217,5 +265,45 @@ fun PlayerScreen(id: String, fromStart: Boolean, onExit: () -> Unit, onNext: (It
             }
         }
         error?.let { Text(it, color = RF.Fg, modifier = Modifier.align(Alignment.Center).background(RF.Deep.copy(alpha = 0.85f)).padding(20.dp)) }
+
+        if (upNext) {
+            val n = next!!
+            val focus = remember { FocusRequester() }
+            Row(
+                Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 110.dp).width(560.dp)
+                    .background(RF.Deep.copy(alpha = 0.94f), RoundedCornerShape(10.dp)).padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AsyncImage(api.image(n, "Primary", 400), null, contentScale = ContentScale.Crop, modifier = Modifier.width(180.dp).aspectRatio(16f / 9f).background(RF.Surface, RoundedCornerShape(6.dp)))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Next episode in ${(durationSec - positionSec).coerceAtLeast(0)}", color = RF.Ember, style = MaterialTheme.typography.titleSmall)
+                    Text("${n.episodeCode} · ${n.Name}", color = RF.Fg, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryButton("Play now", Icons.Play, Modifier.focusRequester(focus)) { onNext(n, false) }
+                        SecondaryButton("Cancel") { dismissed = true }
+                    }
+                }
+            }
+            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        }
+
+        if (asking) {
+            val i = item
+            val focus = remember { FocusRequester() }
+            Column(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+            ) {
+                Text("Are you still watching${if (i?.isEpisode == true) " ${i.SeriesName}" else ""}?", style = MaterialTheme.typography.displaySmall, color = RF.Fg)
+                next?.let { n -> Text("Up next: ${n.episodeCode} · ${n.Name}", color = RF.Muted, style = MaterialTheme.typography.titleMedium) }
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 12.dp)) {
+                    next?.let { n -> PrimaryButton("Continue watching", Icons.Play, Modifier.focusRequester(focus)) { onNext(n, false) } }
+                    SecondaryButton("Back to the show") { i?.SeriesId?.let(onShow) ?: onExit() }
+                }
+            }
+            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        }
     }
 }
