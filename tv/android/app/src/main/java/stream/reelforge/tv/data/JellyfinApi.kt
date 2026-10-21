@@ -119,12 +119,14 @@ class JellyfinApi(
         search: String? = null,
         genre: String? = null,
         fields: String = FIELDS,
+        withImage: String? = null,
     ): ItemsResult {
         val q = buildList {
             add("userId=$uid"); add("recursive=true"); add("fields=$fields")
             add("sortBy=$sortBy"); add("sortOrder=$sortOrder"); add("startIndex=$start"); add("limit=$limit")
             add("enableTotalRecordCount=true")
             parentId?.let { add("parentId=$it") }
+            withImage?.let { add("imageTypes=$it") }
             types?.let { add("includeItemTypes=$it") }
             if (favorites) add("filters=IsFavorite")
             search?.let { add("searchTerm=${enc(it)}") }

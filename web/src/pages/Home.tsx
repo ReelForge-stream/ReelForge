@@ -16,23 +16,21 @@ export default function Home() {
     const top = movieLib
       ? await api.items({ parentId: movieLib.Id, types: 'Movie', sortBy: 'CommunityRating,SortName', sortOrder: 'Descending', limit: 10 }).then((r) => r.Items.filter((i) => i.CommunityRating)).catch(() => [] as Item[])
       : [];
+    // Featured: a mix of new arrivals and the rest of the library, all with big artwork.
+    const spotlight = await api.items({ types: 'Movie,Series', sortBy: 'Random', limit: 24, withImage: 'Backdrop' }).then((r) => r.Items).catch(() => [] as Item[]);
     const allGenres = await api.genres().catch(() => []);
     const names = PREFERRED_GENRES.filter((g) => allGenres.some((x) => x.Name === g)).slice(0, 4);
     const genres = await Promise.all(
       names.map((g) => api.items({ genre: g, types: 'Movie,Series', sortBy: 'Random', limit: 18 }).then((r) => ({ name: g, items: r.Items })).catch(() => ({ name: g, items: [] as Item[] }))),
     );
-    return { resume, nextUp, latest, top, genres: genres.filter((g) => g.items.length >= 4) };
+    return { resume, nextUp, latest, top, spotlight, genres: genres.filter((g) => g.items.length >= 4) };
   }, []);
 
   const empty = !!data.data && !data.data.resume.length && !data.data.latest.some((l) => l.items.length);
   usePoll(data.reload, 10000, empty); // libraries still scanning: fill in as titles appear
 
-  // The billboard features something recent with good artwork, picked once per visit.
-  const feature = useMemo(() => {
-    if (!data.data) return undefined;
-    const pool = data.data.latest.flatMap((l) => l.items).filter((i) => i.BackdropImageTags?.length || i._hue != null);
-    return pool.length ? pool[Math.floor(Math.random() * Math.min(pool.length, 8))] : data.data.resume[0];
-  }, [data.data]);
+  // The billboard rotates through up to 20 titles: newest arrivals first, then a random spread of the library.
+  const featured = useMemo(() => featuredPool(data.data), [data.data]);
 
   if (data.error) return <div className="err-box">Couldn’t load your library: {data.error}</div>;
   if (!data.data) return <div className="loading">Loading…</div>;
@@ -40,7 +38,7 @@ export default function Home() {
 
   return (
     <div className="home">
-      {feature ? <Billboard item={feature} /> : <EmptyLibrary />}
+      {featured.length ? <Rotator items={featured} /> : data.data.resume[0] ? <Billboard item={data.data.resume[0]} /> : <EmptyLibrary />}
       <div className="rows">
         {resume.length > 0 && (
           <Row title={`Continue Watching for ${api.session.user.Name}`}>
@@ -103,6 +101,93 @@ function Row({ title, more, ranked, children }: { title: string; more?: string; 
         )}
       </div>
     </section>
+  );
+}
+
+const hasArt = (i: Item) => !!i.BackdropImageTags?.length || i._hue != null;
+
+/** Up to 20 featured titles: a few newest arrivals, then a shuffle of the rest. Picked once per visit. */
+function featuredPool(d?: { latest: { items: Item[] }[]; spotlight: Item[] }): Item[] {
+  if (!d) return [];
+  const seen = new Set<string>();
+  const out: Item[] = [];
+  const add = (i: Item) => {
+    // Episodes in "latest" stand in for their show; the billboard features the show itself.
+    if (!hasArt(i) || i.Type === 'Episode' || seen.has(i.Id)) return;
+    seen.add(i.Id);
+    out.push(i);
+  };
+  const fresh = d.latest.flatMap((l) => l.items.slice(0, 3));
+  fresh.forEach(add);
+  const rest = [...d.spotlight, ...d.latest.flatMap((l) => l.items.slice(3))];
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  rest.forEach(add);
+  return out.slice(0, 20);
+}
+
+const ROTATE_MS = 9000;
+
+/** Cycles the billboard every few seconds; pauses while you point at it, use it, or the tab is hidden. */
+function Rotator({ items }: { items: Item[] }) {
+  const api = useApi();
+  const [at, setAt] = useState(0);
+  const [held, setHeld] = useState(false);
+  const [tick, setTick] = useState(0);
+  const touch = useRef<number | null>(null);
+  const n = items.length;
+  const go = (i: number) => setAt(((i % n) + n) % n);
+
+  useEffect(() => {
+    if (n < 2 || held) return;
+    const t = window.setTimeout(() => {
+      if (document.visibilityState === 'visible' && !document.querySelector('.item-menu, .dialog-back')) go(at + 1);
+      else setTick((x) => x + 1); // busy right now: try again next round
+    }, ROTATE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [at, held, n, tick]);
+
+  // Warm up the next picture so the change is instant.
+  useEffect(() => {
+    const next = items[(at + 1) % n];
+    const url = next && api.image(next, 'Backdrop', 1920);
+    if (url) new Image().src = url;
+  }, [api, at, items, n]);
+
+  return (
+    <div
+      className="rotator"
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setHeld(false)}
+      onTouchStart={(e) => (touch.current = e.touches[0].clientX)}
+      onTouchEnd={(e) => {
+        const dx = e.changedTouches[0].clientX - (touch.current ?? e.changedTouches[0].clientX);
+        if (Math.abs(dx) > 50) go(at + (dx < 0 ? 1 : -1));
+        touch.current = null;
+      }}
+      aria-roledescription="carousel"
+      aria-label="Featured"
+    >
+      <Billboard key={items[at].Id} item={items[at]} />
+      {n > 1 && (
+        <>
+          <button className="rot-arrow left" aria-label="Previous featured title" onClick={() => go(at - 1)}><Icon.back /></button>
+          <button className="rot-arrow right" aria-label="Next featured title" onClick={() => go(at + 1)}><Icon.back /></button>
+          <div className="rot-dots" role="tablist" aria-label="Featured titles">
+            {items.map((it, i) => (
+              <button key={it.Id} role="tab" aria-selected={i === at} aria-label={`${i + 1} of ${n}: ${it.Name}`} className={i === at ? `on${held ? '' : ' run'}` : ''} onClick={() => go(i)}>
+                <span style={{ animationDuration: `${ROTATE_MS}ms` }} />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

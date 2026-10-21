@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Item } from '../lib/types';
 import { publishItem, useItemMenu, useLiveItem, useMenuTrigger, useOnItemUpdated } from '../lib/itemMenu';
 import { Art, Icon, isRecent, useApi, useAsync, useDetailsLink, useToast } from '../lib/ui';
+import { useCanDownload } from '../lib/download';
 
 /** Figma: "MovieDetails / Inside" (118:2845), an 850px overlay above the page it was opened from. */
 export default function Details({ hasBackground }: { hasBackground: boolean }) {
@@ -71,6 +72,7 @@ function DetailsBody({ item }: { item: Item }) {
   const resumable = isSeries ? (nextEp?.UserData?.PlayedPercentage ?? 0) > 0 : (item.UserData?.PlayedPercentage ?? 0) > 0;
 
   const menu = useItemMenu();
+  const canDownload = useCanDownload();
   const heroMenu = useMenuTrigger(item);
   const toggleFav = async () => {
     await api.setFavorite(item.Id, !fav);
@@ -108,6 +110,11 @@ function DetailsBody({ item }: { item: Item }) {
             {!isSeries && (
               <button className={`circle-btn${played ? ' on' : ''}`} aria-pressed={played} aria-label={played ? 'Mark as unwatched' : 'Mark as watched'} title={played ? 'Mark as unwatched' : 'Mark as watched'} onClick={toggleWatched}>
                 <Icon.check />
+              </button>
+            )}
+            {!isSeries && menu && canDownload && (
+              <button className="circle-btn" aria-label="Download" title="Download to this device" onClick={() => menu.download(item)}>
+                <Icon.download />
               </button>
             )}
             {menu && (

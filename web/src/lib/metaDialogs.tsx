@@ -6,7 +6,7 @@ import type { Item } from './types';
 import { Icon, useApi, useToast } from './ui';
 
 /** Shared modal frame for the title editors. */
-function Modal({ title, sub, onClose, busy, children, wide }: { title: string; sub: string; onClose: () => void; busy: boolean; children: ReactNode; wide?: boolean }) {
+export function Modal({ title, sub, onClose, busy, children, wide }: { title: string; sub: string; onClose: () => void; busy: boolean; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
     window.addEventListener('keydown', key);

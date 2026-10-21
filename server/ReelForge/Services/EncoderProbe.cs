@@ -16,6 +16,9 @@ public sealed record EncoderReport
 
     public bool HevcNvenc10Bit { get; init; }
 
+    /// <summary>Gets a value indicating whether ffmpeg can turn HDR into normal colour (zscale filter).</summary>
+    public bool CanToneMap { get; init; }
+
     public string Summary { get; init; } = string.Empty;
 }
 
@@ -58,7 +61,7 @@ public sealed class EncoderProbe
 
             var (gpu, driver) = await QueryNvidiaSmiAsync(ct).ConfigureAwait(false);
             var working = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var enc in new[] { "hevc_nvenc", "av1_nvenc", "libx265", "libsvtav1" })
+            foreach (var enc in new[] { "hevc_nvenc", "av1_nvenc", "libx265", "libsvtav1", "h264_nvenc", "libx264" })
             {
                 if (await TestEncodeAsync(enc, "yuv420p", ct).ConfigureAwait(false))
                 {
@@ -74,8 +77,10 @@ public sealed class EncoderProbe
                     ? $"{gpu} found but it can't encode HEVC (needs a Pascal or newer card). Using the CPU instead — much slower."
                     : "No NVIDIA encoder found. Conversions will use the CPU — much slower.";
 
+            bool zscale = await HasFilterAsync("zscale", ct).ConfigureAwait(false);
             _cached = new EncoderReport
             {
+                CanToneMap = zscale,
                 GpuName = gpu,
                 DriverVersion = driver,
                 Working = working,
@@ -88,6 +93,37 @@ public sealed class EncoderProbe
         finally
         {
             _lock.Release();
+        }
+    }
+
+    private async Task<bool> HasFilterAsync(string name, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(FfmpegPath))
+        {
+            return false;
+        }
+
+        var psi = new ProcessStartInfo(FfmpegPath) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        psi.ArgumentList.Add("-hide_banner");
+        psi.ArgumentList.Add("-filters");
+        try
+        {
+            using var p = Process.Start(psi);
+            if (p is null)
+            {
+                return false;
+            }
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(15));
+            _ = p.StandardError.ReadToEndAsync(timeout.Token);
+            string list = await p.StandardOutput.ReadToEndAsync(timeout.Token).ConfigureAwait(false);
+            await p.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            return list.Split('\n').Any(l => l.Split(' ', StringSplitOptions.RemoveEmptyEntries).ElementAtOrDefault(1) == name);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
         }
     }
 

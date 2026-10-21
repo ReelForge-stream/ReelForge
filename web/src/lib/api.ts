@@ -1,8 +1,9 @@
 import type {
   ActiveSession, ActivityEntry, AdminUser, DupGroup, HeldFile, Item, Job, MediaSource, Overview, ScheduledTask, Session, Settings,
-  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder,
+  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult,
 } from './types';
 import { demo } from './demo';
+import { describeDevice } from './device';
 
 const CLIENT = 'ReelForge';
 const VERSION = '0.1.0';
@@ -33,7 +34,7 @@ export function defaultServer(): string {
 function authHeader(token?: string): string {
   const parts = [
     `Client="${CLIENT}"`,
-    `Device="${navigator.userAgent.includes('Mobile') ? 'Phone' : 'Browser'}"`,
+    `Device="${describeDevice(navigator.userAgent, navigator.maxTouchPoints)}"`,
     `DeviceId="${deviceId()}"`,
     `Version="${VERSION}"`,
   ];
@@ -154,7 +155,7 @@ export class Api {
     return this.get<Item[]>(`/Items/Latest?userId=${this.userId}&parentId=${parentId}&limit=18&fields=${Api.fields}`);
   }
 
-  items(opts: { parentId?: string; types?: string; sortBy?: string; sortOrder?: string; search?: string; start?: number; limit?: number; genre?: string; favorites?: boolean }) {
+  items(opts: { parentId?: string; types?: string; sortBy?: string; sortOrder?: string; search?: string; start?: number; limit?: number; genre?: string; favorites?: boolean; withImage?: string }) {
     const q = new URLSearchParams({
       userId: this.userId,
       recursive: 'true',
@@ -170,6 +171,7 @@ export class Api {
     if (opts.search) q.set('searchTerm', opts.search);
     if (opts.genre) q.set('genres', opts.genre);
     if (opts.favorites) q.set('filters', 'IsFavorite');
+    if (opts.withImage) q.set('imageTypes', opts.withImage);
     return this.get<{ Items: Item[]; TotalRecordCount: number }>(`/Items?${q}`);
   }
 
@@ -404,6 +406,20 @@ export class Api {
     return `${this.session.server}/Items/${id}/Images/${type}${type === 'Backdrop' ? `/${index}` : ''}?maxWidth=${width}&quality=90&tag=${tag}`;
   }
 
+  // ---------- Downloads ----------
+
+  downloads = {
+    options: (itemId: string, mediaSourceId?: string) =>
+      this.get<DownloadOptions>(`/ReelForge/DownloadJobs/Options/${itemId}${mediaSourceId ? `?mediaSourceId=${mediaSourceId}` : ''}`),
+    start: (ItemId: string, MediaSourceId: string, Option: string, AudioIndex: number) =>
+      this.post<DownloadJob>('/ReelForge/DownloadJobs', { ItemId, MediaSourceId, Option, AudioIndex }),
+    list: () => this.get<DownloadJob[]>('/ReelForge/DownloadJobs'),
+    remove: (id: string) => this.del(`/ReelForge/DownloadJobs/${id}`),
+    /** Plain links (the browser downloads them itself, so the token rides in the address). */
+    fileUrl: (id: string) => `${this.session.server}/ReelForge/DownloadJobs/${id}/File?ApiKey=${this.session.token}`,
+    originalUrl: (itemId: string) => `${this.session.server}/Items/${itemId}/Download?ApiKey=${this.session.token}`,
+  };
+
   // ---------- Server settings (administrators) ----------
 
   admin = {
@@ -462,6 +478,8 @@ export class Api {
     stopSession: (id: string) => this.post(`/Sessions/${id}/Playing/Stop`),
     message: (id: string, text: string) => this.post(`/Sessions/${id}/Message`, { Header: 'Message from the server', Text: text, TimeoutMs: 8000 }),
     activity: (limit = 40) => this.get<{ Items: ActivityEntry[] }>(`/System/ActivityLog/Entries?limit=${limit}`).then((r) => r.Items),
+    history: (days: number, userId?: string) =>
+      this.get<WatchHistoryResult>(`/ReelForge/Activity/History?days=${days}${userId ? `&userId=${userId}` : ''}`),
     tasks: () => this.get<ScheduledTask[]>('/ScheduledTasks?isHidden=false'),
     runTask: (id: string) => this.post(`/ScheduledTasks/Running/${id}`),
     stopTask: (id: string) => this.del(`/ScheduledTasks/Running/${id}`),

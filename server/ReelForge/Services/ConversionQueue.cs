@@ -413,117 +413,21 @@ public sealed class ConversionQueue : BackgroundService
         }
     }
 
-    private async Task RunFfmpegAsync(ConversionJob job, MediaFile file, IReadOnlyList<string> args, CancellationToken ct)
-    {
-        var psi = new ProcessStartInfo(_probe.FfmpegPath)
+    private Task RunFfmpegAsync(ConversionJob job, MediaFile file, IReadOnlyList<string> args, CancellationToken ct) =>
+        FfmpegRunner.RunAsync(_probe.FfmpegPath, args, file.DurationTicks, (fraction, speed) =>
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var a in args)
-        {
-            psi.ArgumentList.Add(a);
-        }
-
-        using var p = Process.Start(psi) ?? throw new InvalidOperationException("Could not start ffmpeg");
-        try
-        {
-            // Stay out of the way of live streaming transcodes.
-            p.PriorityClass = ProcessPriorityClass.BelowNormal;
-        }
-        catch (Exception)
-        {
-        }
-
-        using var reg = ct.Register(() =>
-        {
-            try
+            job.Progress = fraction;
+            if (speed is { } sp)
             {
-                p.Kill(entireProcessTree: true);
-            }
-            catch (Exception)
-            {
-            }
-        });
-
-        var errTail = new StringBuilder();
-        var errTask = Task.Run(async () =>
-        {
-            string? line;
-            while ((line = await p.StandardError.ReadLineAsync(CancellationToken.None).ConfigureAwait(false)) is not null)
-            {
-                lock (errTail)
-                {
-                    errTail.AppendLine(line);
-                    if (errTail.Length > 4000)
-                    {
-                        errTail.Remove(0, errTail.Length - 4000);
-                    }
-                }
-            }
-        }, CancellationToken.None);
-
-        double totalUs = Math.Max(1, file.DurationTicks / 10.0);
-        string? outLine;
-        while ((outLine = await p.StandardOutput.ReadLineAsync(CancellationToken.None).ConfigureAwait(false)) is not null)
-        {
-            var progress = ParseProgressLine(outLine);
-            if (progress.OutTimeUs is { } us)
-            {
-                job.Progress = Math.Clamp(us / totalUs, 0, 0.999);
-            }
-
-            if (progress.Speed is { } speed && speed > 0)
-            {
-                job.Speed = speed;
-                double remainingSec = (1 - job.Progress) * (totalUs / 1e6) / speed;
-                job.EtaSeconds = (int)remainingSec;
+                job.Speed = sp;
+                job.EtaSeconds = (int)((1 - fraction) * (file.DurationTicks / 1e7) / sp);
             }
 
             SaveJobs(force: false);
-        }
+        }, ct);
 
-        await p.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-        await errTask.ConfigureAwait(false);
-        ct.ThrowIfCancellationRequested();
-        if (p.ExitCode != 0)
-        {
-            string err;
-            lock (errTail)
-            {
-                err = errTail.ToString().Trim();
-            }
+    internal static (double? OutTimeUs, double? Speed) ParseProgressLine(string line) => FfmpegRunner.ParseProgressLine(line);
 
-            throw new InvalidOperationException($"ffmpeg failed ({p.ExitCode}): {LastLines(err, 3)}");
-        }
-    }
-
-    internal static (double? OutTimeUs, double? Speed) ParseProgressLine(string line)
-    {
-        int eq = line.IndexOf('=', StringComparison.Ordinal);
-        if (eq <= 0)
-        {
-            return (null, null);
-        }
-
-        string key = line[..eq].Trim();
-        string val = line[(eq + 1)..].Trim();
-        if (key is "out_time_us" or "out_time_ms" && double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out var us) && us >= 0)
-        {
-            return (us, null); // ffmpeg's out_time_ms is (despite the name) microseconds too
-        }
-
-        if (key == "speed" && double.TryParse(val.TrimEnd('x', 'X'), NumberStyles.Float, CultureInfo.InvariantCulture, out var sp))
-        {
-            return (null, sp);
-        }
-
-        return (null, null);
-    }
-
-    /// <summary>Re-probes the output and refuses to continue unless length and track counts match the source.</summary>
     private async Task VerifyAsync(MediaFile source, string outputPath, CancellationToken ct)
     {
         var psi = new ProcessStartInfo(_probe.FfprobePath)

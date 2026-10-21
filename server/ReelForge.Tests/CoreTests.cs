@@ -618,3 +618,75 @@ public class ScanServiceTests
         Assert.Equal("NAS offline", s.Error);
     }
 }
+
+public class DownloadPlanTests
+{
+    private static string Joined(IReadOnlyList<string> a) => string.Join(' ', a);
+
+    [Fact]
+    public void Offers_only_sizes_the_source_has_largest_first()
+    {
+        var uhd = Make.Movie("/m/a.mkv", codec: "hevc", width: 3840, height: 2160, videoMbps: 40);
+        Assert.Equal(["1080p", "720p", "480p"], DownloadPlan.Options(uhd).Select(o => o.Id));
+
+        var hd = Make.Movie("/m/b.mkv", width: 1280, height: 720, videoMbps: 4);
+        Assert.Equal(["720p", "480p"], DownloadPlan.Options(hd).Select(o => o.Id));
+
+        var scope = Make.Movie("/m/c.mkv", width: 1920, height: 800); // wide film still counts as 1080p
+        Assert.Equal("1080p", DownloadPlan.Options(scope)[0].Id);
+
+        var dvd = Make.Movie("/m/d.vob", codec: "mpeg2video", width: 720, height: 480, videoMbps: 5);
+        Assert.Equal("480p", Assert.Single(DownloadPlan.Options(dvd)).Id);
+    }
+
+    [Fact]
+    public void Estimates_size_from_bitrate_and_never_exceeds_the_source()
+    {
+        var film = Make.Movie("/m/a.mkv", width: 1920, height: 1080, videoMbps: 10); // 2 hours
+        var o1080 = DownloadPlan.Options(film)[0];
+        Assert.Equal(6_000_000, o1080.VideoBitrate);
+        double gb = o1080.EstimatedBytes / 1e9;
+        Assert.InRange(gb, 5.4, 5.7); // (6 Mbps + 192 kbps) x 7200 s
+
+        var thin = Make.Movie("/m/b.mkv", width: 1920, height: 1080, videoMbps: 2); // already small H.264
+        Assert.Equal(2_000_000, DownloadPlan.Options(thin)[0].VideoBitrate);
+    }
+
+    [Fact]
+    public void Builds_a_universal_mp4_with_chosen_audio_and_text_subtitles()
+    {
+        var f = Make.Movie("/m/a.mkv", codec: "hevc", width: 3840, height: 2160, range: DynamicRange.Hdr10, bitDepth: 10) with
+        {
+            AudioTracks = [new AudioTrack("truehd", 8, 4_000_000, "eng"), new AudioTrack("ac3", 6, 640_000, "fra")],
+            SubtitleTracks = [new SubtitleTrack("PGS", "eng", false), new SubtitleTrack("subrip", "fra", false), new SubtitleTrack("subrip", "spa", false, true, "/does/not/exist.srt")],
+        };
+        var o = DownloadPlan.Options(f).First(x => x.Id == "720p");
+        string a = Joined(DownloadPlan.Build(f, o, 1, "h264_nvenc", true, true, "/tmp/out.mp4"));
+
+        Assert.Contains("-hwaccel cuda", a);
+        Assert.Contains("-map 0:a:1", a);
+        Assert.Contains("language=fra", a);
+        Assert.Contains("-map 0:s:1", a); // the French SRT; the PGS picture subtitles can't go in an MP4
+        Assert.DoesNotContain("-map 0:s:0", a);
+        Assert.DoesNotContain("exist.srt", a); // missing external file is skipped, not an ffmpeg error
+        Assert.Contains("scale=w=1280:h=-2", a);
+        Assert.Contains("tonemap=tonemap=hable", a);
+        Assert.Contains("-c:v h264_nvenc", a);
+        Assert.Contains("-c:a aac -ac 2", a);
+        Assert.Contains("-c:s mov_text", a);
+        Assert.EndsWith("-f mp4 /tmp/out.mp4", a);
+
+        string cpu = Joined(DownloadPlan.Build(f, o, 0, "libx264", false, false, "/tmp/out.mp4"));
+        Assert.DoesNotContain("cuda", cpu);
+        Assert.DoesNotContain("tonemap", cpu);
+        Assert.Contains("-c:v libx264", cpu);
+    }
+
+    [Fact]
+    public void File_names_are_safe()
+    {
+        Assert.Equal("Severance S02E03 - Who Is Alive - 720p.mp4", DownloadPlan.FileName("Severance S02E03 · Who Is Alive?", "720p").Replace("  ", " "));
+        Assert.Equal("AC DC Live - 480p.mp4", DownloadPlan.FileName("AC/DC: Live", "480p"));
+    }
+}
+

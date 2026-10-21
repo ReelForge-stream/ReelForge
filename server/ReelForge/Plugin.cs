@@ -83,6 +83,10 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<NetworkShares>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<NetworkShares>());
         serviceCollection.AddHostedService<UpdateFeed>();
+        serviceCollection.AddSingleton<DownloadService>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<DownloadService>());
+        serviceCollection.AddSingleton<WatchHistory>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<WatchHistory>());
         serviceCollection.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, FrontDoor>();
     }
 }

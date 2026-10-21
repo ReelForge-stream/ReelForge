@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent, type ReactNode, type TouchEvent as RTouchEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { DownloadDialog, useCanDownload } from './download';
 import { EditInfoDialog, FixMatchDialog } from './metaDialogs';
 import type { ImageKind, RemoteImage } from './api';
 import type { Item } from './types';
@@ -48,6 +49,7 @@ export function useOnItemUpdated(id: string | undefined, fn: () => void) {
 interface MenuApi {
   open: (item: Item, x: number, y: number) => void;
   editArtwork: (item: Item, kind?: ImageKind) => void;
+  download: (item: Item) => void;
 }
 const MenuContext = createContext<MenuApi | null>(null);
 
@@ -99,7 +101,7 @@ export function useMenuTrigger(item: Item) {
 
 type Open = { item: Item; x: number; y: number } | null;
 
-type Dialog = { kind: 'art'; item: Item; image?: ImageKind } | { kind: 'info' | 'match'; item: Item } | null;
+type Dialog = { kind: 'art'; item: Item; image?: ImageKind } | { kind: 'info' | 'match' | 'download'; item: Item } | null;
 
 export function ItemMenuHost({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<Open>(null);
@@ -110,6 +112,10 @@ export function ItemMenuHost({ children }: { children: ReactNode }) {
       editArtwork: (item, image) => {
         setOpen(null);
         setDialog({ kind: 'art', item, image });
+      },
+      download: (item) => {
+        setOpen(null);
+        setDialog({ kind: 'download', item });
       },
     }),
     [],
@@ -122,6 +128,7 @@ export function ItemMenuHost({ children }: { children: ReactNode }) {
       {dialog?.kind === 'art' && <ArtworkDialog item={dialog.item} initial={dialog.image} onClose={close} />}
       {dialog?.kind === 'info' && <EditInfoDialog item={dialog.item} onClose={close} />}
       {dialog?.kind === 'match' && <FixMatchDialog item={dialog.item} onClose={close} />}
+      {dialog?.kind === 'download' && <DownloadDialog item={dialog.item} onClose={close} />}
     </MenuContext.Provider>
   );
 }
@@ -137,6 +144,7 @@ function ItemMenu({ item: shown, x, y, onClose, onDialog }: { item: Item; x: num
   const fav = !!item.UserData?.IsFavorite;
   const played = !!item.UserData?.Played;
   const playable = item.Type === 'Movie' || item.Type === 'Episode' || item.Type === 'Video';
+  const canDownload = useCanDownload();
   const resumable = (item.UserData?.PlayedPercentage ?? 0) > 0;
   const title = item.Type === 'Episode' ? `${item.SeriesName ?? ''} · ${item.Name}` : item.Name;
 
@@ -241,6 +249,12 @@ function ItemMenu({ item: shown, x, y, onClose, onDialog }: { item: Item; x: num
         <Icon.check />
         {played ? 'Mark as unwatched' : 'Mark as watched'}
       </button>
+      {playable && canDownload && (
+        <button role="menuitem" onClick={() => onDialog({ kind: 'download', item })}>
+          <Icon.download />
+          Download…
+        </button>
+      )}
       {api.isAdmin && (
         <>
           <div className="im-sep" role="separator" />

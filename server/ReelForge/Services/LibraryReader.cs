@@ -97,6 +97,12 @@ public sealed class LibraryReader
             .FirstOrDefault(f => f.MediaSourceId.Equals(mediaSourceId, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Reads every version (file) of one title.</summary>
+    public IReadOnlyList<MediaFile> ReadVersions(Guid itemId) =>
+        _library.GetItemById(itemId) is Video video
+            ? ToFiles(video, new Dictionary<Guid, IReadOnlyDictionary<string, string>>()).ToList()
+            : Array.Empty<MediaFile>();
+
     private IEnumerable<MediaFile> ToFiles(Video video, Dictionary<Guid, IReadOnlyDictionary<string, string>> seriesCache)
     {
         bool plainVideo = video.VideoType == VideoType.VideoFile && video.AdditionalParts.Length == 0;
@@ -152,11 +158,11 @@ public sealed class LibraryReader
             TotalBitrate = src.Bitrate ?? 0,
             AudioTracks = streams.Where(s => s.Type == MediaStreamType.Audio)
                 .OrderBy(s => s.Index)
-                .Select(s => new AudioTrack(s.Codec ?? "unknown", s.Channels ?? 2, s.BitRate ?? 0, s.Language, s.Profile))
+                .Select(s => new AudioTrack(s.Codec ?? "unknown", s.Channels ?? 2, s.BitRate ?? 0, s.Language, s.Profile, s.DisplayTitle))
                 .ToList(),
             SubtitleTracks = streams.Where(s => s.Type == MediaStreamType.Subtitle)
                 .OrderBy(s => s.IsExternal).ThenBy(s => s.Index)
-                .Select(s => new SubtitleTrack(s.Codec ?? "unknown", s.Language, s.IsForced, s.IsExternal))
+                .Select(s => new SubtitleTrack(s.Codec ?? "unknown", s.Language, s.IsForced, s.IsExternal, s.IsExternal ? s.Path : null))
                 .ToList(),
             IsPlainFile = plainVideo,
         };

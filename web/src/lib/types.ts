@@ -93,7 +93,7 @@ export interface Item {
 export interface User {
   Id: string;
   Name: string;
-  Policy?: { IsAdministrator?: boolean };
+  Policy?: { IsAdministrator?: boolean; EnableContentDownloading?: boolean };
   HasPassword?: boolean;
   PrimaryImageTag?: string;
 }
@@ -317,4 +317,80 @@ export interface SystemInfo {
   HasPendingRestart?: boolean;
   CanSelfRestart?: boolean;
   OperatingSystemDisplayName?: string;
+}
+
+// ---------- Downloads ----------
+
+export interface DownloadOption {
+  Id: string;
+  Label: string;
+  MaxWidth: number;
+  VideoBitrate: number;
+  EstimatedBytes: number;
+}
+
+export interface DownloadOptions {
+  ItemId: string;
+  MediaSourceId: string;
+  Title: string;
+  FileName: string;
+  SizeBytes: number;
+  DurationSeconds: number;
+  Container: string;
+  VideoCodec: string;
+  VideoProfile?: string;
+  BitDepth: number;
+  Width: number;
+  Height: number;
+  Range: string;
+  AudioCodecs: string[];
+  AudioTracks: { Index: number; Label: string; Codec: string; Channels: number }[];
+  TextSubtitles: number;
+  PictureSubtitles: number;
+  Options: DownloadOption[];
+  UsesGpu: boolean;
+}
+
+export interface DownloadJob {
+  Id: string;
+  ItemId: string;
+  Title: string;
+  Label: string;
+  FileName: string;
+  State: 'Waiting' | 'Converting' | 'Ready' | 'Failed';
+  Progress: number;
+  EtaSeconds?: number;
+  EstimatedBytes: number;
+  SizeBytes: number;
+  Error?: string;
+  CreatedUtc: string;
+  ExpiresUtc: string;
+}
+
+// ---------- Watch history (administrators) ----------
+
+export interface WatchRecord {
+  UserId: string;
+  UserName: string;
+  ItemId: string;
+  Title: string;
+  ItemType: string;
+  SeriesId?: string;
+  DeviceName: string;
+  Client: string;
+  RemoteAddress?: string;
+  PlayMethod?: string;
+  ConvertedHeight?: number;
+  StartedUtc: string;
+  EndedUtc?: string;
+  WatchedSeconds?: number;
+  PositionTicks?: number;
+  RunTimeTicks?: number;
+  Finished?: boolean;
+}
+
+export interface WatchHistoryResult {
+  Records: WatchRecord[];
+  TrackingSince?: string;
+  Users: { Id: string; Name: string }[];
 }

@@ -196,6 +196,10 @@ export const Icon = {
   more: () => (<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="18" cy="12" r="1.8" /></svg>),
   upload: () => (<svg viewBox="0 0 24 24" {...S}><path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9M5 15v3.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V15" /></svg>),
   trash: () => (<svg viewBox="0 0 24 24" {...S}><path d="M5 7h14M10 7V5h4v2M7 7l1 12.5h8L17 7" /></svg>),
+  download: () => (<svg viewBox="0 0 24 24" {...S}><path d="M12 4.5v11M7.5 11 12 15.5 16.5 11M5 15v3.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V15" /></svg>),
+  phone: () => (<svg viewBox="0 0 24 24" {...S}><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M11 17.5h2" /></svg>),
+  laptop: () => (<svg viewBox="0 0 24 24" {...S}><rect x="5" y="5" width="14" height="10" rx="1.5" /><path d="M3 18.5h18" /></svg>),
+  globe: () => (<svg viewBox="0 0 24 24" {...S}><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.5 2.4 3.5 5.2 3.5 8.5s-1 6.1-3.5 8.5c-2.5-2.4-3.5-5.2-3.5-8.5s1-6.1 3.5-8.5z" /></svg>),
   episodes: () => (<svg viewBox="0 0 24 24" {...S}><rect x="3" y="7" width="14" height="12" rx="1.5" /><path d="M7 4h13a1 1 0 0 1 1 1v11" /></svg>),
 };
 

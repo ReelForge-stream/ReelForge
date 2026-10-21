@@ -128,7 +128,7 @@ public sealed record MediaFile
     }
 }
 
-public sealed record AudioTrack(string Codec, int Channels, long Bitrate, string? Language, string? Profile = null)
+public sealed record AudioTrack(string Codec, int Channels, long Bitrate, string? Language, string? Profile = null, string? DisplayTitle = null)
 {
     private static readonly string[] LosslessCodecs = ["truehd", "flac", "pcm_s16le", "pcm_s24le", "alac", "mlp"];
 
@@ -138,4 +138,10 @@ public sealed record AudioTrack(string Codec, int Channels, long Bitrate, string
             && (Profile?.Contains("MA", StringComparison.OrdinalIgnoreCase) ?? false));
 }
 
-public sealed record SubtitleTrack(string Codec, string? Language, bool IsForced, bool IsExternal = false);
+public sealed record SubtitleTrack(string Codec, string? Language, bool IsForced, bool IsExternal = false, string? ExternalPath = null)
+{
+    private static readonly string[] TextCodecs = ["subrip", "srt", "ass", "ssa", "webvtt", "vtt", "mov_text", "text", "tx3g"];
+
+    /// <summary>Gets a value indicating whether this is a text format (convertible to MP4 subtitles), not a picture format like PGS.</summary>
+    public bool IsText => TextCodecs.Contains(Codec, StringComparer.OrdinalIgnoreCase);
+}

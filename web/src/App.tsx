@@ -27,7 +27,9 @@ import SettingsLibraries from './settings/Libraries';
 import SettingsProfiles from './settings/Profiles';
 import SettingsPlayback from './settings/Playback';
 import SettingsNetwork from './settings/Network';
-import SettingsActivity from './settings/Activity';
+import SettingsActivity, { WatchingBadge } from './settings/Activity';
+import Downloads from './pages/Downloads';
+import { DownloadWatcher, useCanDownload } from './lib/download';
 
 // The player pulls in hls.js; load it only when someone presses Play.
 const Player = lazy(() => import('./pages/Player'));
@@ -105,6 +107,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
           <Route path="library/:id" element={<Library />} />
           <Route path="list" element={<MyList />} />
           <Route path="search" element={<Search />} />
+          <Route path="downloads" element={<Downloads />} />
           {api.isAdmin && (
             <Route path="manager" element={<ManagerLayout />}>
               <Route index element={<ManagerOverview />} />
@@ -173,6 +176,7 @@ function Shell({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
           </nav>
         </div>
         <div className="topbar-right">
+          {api.isAdmin && <WatchingBadge />}
           <SearchBox />
           <ProfileMenu onSignOut={onSignOut} />
         </div>
@@ -181,6 +185,7 @@ function Shell({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
       <main className="main">
         <Outlet />
       </main>
+      <DownloadWatcher />
 
       <nav className="tabbar" aria-label="Main">
         <NavLink to="/" end>
@@ -214,6 +219,7 @@ function ProfileMenu({ onSignOut }: { onSignOut: (switchTo?: string) => void }) 
   const [others, setOthers] = useState<User[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   const me = api.session.user;
+  const canDownload = useCanDownload();
   const server = api.session.server || defaultServer();
 
   useEffect(() => {
@@ -253,6 +259,12 @@ function ProfileMenu({ onSignOut }: { onSignOut: (switchTo?: string) => void }) 
             ))}
           </div>
           <div className="pm-actions">
+            {canDownload && (
+              <button role="menuitem" className="pm-row" onClick={() => go('/downloads')}>
+                <span className="pm-icon"><Icon.download /></span>
+                <span>Downloads</span>
+              </button>
+            )}
             {api.isAdmin && (
               <>
                 <button role="menuitem" className="pm-row" onClick={() => go('/manager')}>

@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,13 +41,19 @@ import coil3.compose.AsyncImage
 import stream.reelforge.tv.appState
 import stream.reelforge.tv.data.Item
 import stream.reelforge.tv.data.JellyfinApi
+import kotlinx.coroutines.delay
 import stream.reelforge.tv.ui.components.ContentRow
+import stream.reelforge.tv.ui.components.Icons
+import stream.reelforge.tv.ui.components.PrimaryButton
+import stream.reelforge.tv.ui.components.SecondaryButton
 import stream.reelforge.tv.ui.components.ItemOptions
 import stream.reelforge.tv.ui.components.Meta
 import stream.reelforge.tv.ui.components.Tag
 import stream.reelforge.tv.ui.theme.RF
 
 private data class HomeRow(val title: String, val items: List<Item>, val poster: Boolean = false)
+
+private const val ROTATE_MS = 9_000L
 
 /** Home: the focused title fills the top of the screen; rows of tiles below (Figma Home). */
 @Composable
@@ -53,14 +64,26 @@ fun HomeContent(onOpen: (Item) -> Unit, onPlay: (Item) -> Unit) {
     var focused by remember { mutableStateOf<Item?>(null) }
     var options by remember { mutableStateOf<Item?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    // Featured titles rotate at the top while the highlight sits on the Play / More info buttons.
+    var featured by remember { mutableStateOf<List<Item>>(emptyList()) }
+    var at by remember { mutableIntStateOf(0) }
+    var featuredMode by remember { mutableStateOf(true) }
 
     LaunchedEffect(reload) {
         rows = runCatching { loadHome(api, state.session?.userName.orEmpty()) }.getOrDefault(emptyList())
+        featured = runCatching { featuredPool(api, rows.orEmpty()) }.getOrDefault(emptyList())
         if (focused == null) focused = rows?.firstOrNull()?.items?.firstOrNull()
     }
+    LaunchedEffect(featuredMode, at, featured) {
+        if (featuredMode && featured.size > 1) {
+            delay(ROTATE_MS)
+            at = (at + 1) % featured.size
+        }
+    }
+    val spotlight = featured.getOrNull(at)
 
     Box(Modifier.fillMaxSize()) {
-        Hero(focused, api)
+        Hero(if (featuredMode && spotlight != null) spotlight else focused, api)
         if (rows == null) {
             Text("Loading…", color = RF.Muted, modifier = Modifier.align(Alignment.Center))
         } else if (rows!!.isEmpty()) {
@@ -74,6 +97,26 @@ fun HomeContent(onOpen: (Item) -> Unit, onPlay: (Item) -> Unit) {
                 contentPadding = PaddingValues(top = 300.dp, bottom = 60.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
+                if (spotlight != null) {
+                    item(key = "featured") {
+                        Row(
+                            Modifier.padding(start = 48.dp).offset(y = (-24).dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val onFocus = Modifier.onFocusChanged { if (it.hasFocus) featuredMode = true }
+                            PrimaryButton(if (spotlight.isSeries) "Watch" else "Play", Icons.Play, onFocus) { if (spotlight.isSeries) onOpen(spotlight) else onPlay(spotlight) }
+                            SecondaryButton("More info", null, onFocus) { onOpen(spotlight) }
+                            if (featured.size > 1) {
+                                Row(Modifier.padding(start = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    featured.indices.forEach { i ->
+                                        Box(Modifier.size(width = if (i == at) 22.dp else 8.dp, height = 4.dp).background(if (i == at) RF.Fg else RF.Fg.copy(alpha = 0.3f), RoundedCornerShape(2.dp)))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 rows!!.forEach { row ->
                     item(key = row.title) {
                         ContentRow(
@@ -81,7 +124,7 @@ fun HomeContent(onOpen: (Item) -> Unit, onPlay: (Item) -> Unit) {
                             items = row.items,
                             imageFor = { api.image(it, if (row.poster) "Primary" else "Thumb", if (row.poster) 300 else 500) },
                             onOpen = { if (it.isEpisode) onPlay(it) else onOpen(it) },
-                            onFocusItem = { focused = it },
+                            onFocusItem = { focused = it; featuredMode = false },
                             onLongClick = { options = it },
                             poster = row.poster,
                         )
@@ -91,6 +134,13 @@ fun HomeContent(onOpen: (Item) -> Unit, onPlay: (Item) -> Unit) {
         }
         options?.let { o -> ItemOptions(o, { options = null }, onPlay, { onOpen(if (it.isEpisode && it.SeriesId != null) it.copy(Id = it.SeriesId, Type = "Series") else it) }, { reload++ }) }
     }
+}
+
+/** Up to 20 titles with big artwork: a few of the newest, then a shuffle of the rest of the library. */
+private suspend fun featuredPool(api: JellyfinApi, rows: List<HomeRow>): List<Item> {
+    val random = runCatching { api.items(types = "Movie,Series", sortBy = "Random", limit = 24, withImage = "Backdrop").Items }.getOrDefault(emptyList())
+    val newest = rows.filter { it.title.startsWith("New in") }.flatMap { it.items.take(3) }.filter { !it.isEpisode && !it.BackdropImageTags.isNullOrEmpty() }
+    return (newest + random.shuffled()).distinctBy { it.Id }.take(20)
 }
 
 private suspend fun loadHome(api: JellyfinApi, name: String): List<HomeRow> {
