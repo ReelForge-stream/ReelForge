@@ -690,3 +690,19 @@ public class DownloadPlanTests
     }
 }
 
+public class QueueCleanupTests
+{
+    [Fact]
+    public void Finished_failed_and_cancelled_leave_after_45_minutes()
+    {
+        var now = new DateTime(2026, 10, 21, 12, 0, 0, DateTimeKind.Utc);
+        ConversionJob Job(JobStatus s, int minutesAgo) => new() { Status = s, FinishedUtc = now.AddMinutes(-minutesAgo) };
+
+        Assert.True(ConversionQueue.IsExpired(Job(JobStatus.Done, 45), now));
+        Assert.True(ConversionQueue.IsExpired(Job(JobStatus.Failed, 60), now));
+        Assert.True(ConversionQueue.IsExpired(Job(JobStatus.Cancelled, 46), now));
+        Assert.False(ConversionQueue.IsExpired(Job(JobStatus.Done, 44), now));
+        Assert.False(ConversionQueue.IsExpired(Job(JobStatus.Running, 600), now)); // still working: never removed
+        Assert.False(ConversionQueue.IsExpired(Job(JobStatus.Queued, 600), now));
+    }
+}

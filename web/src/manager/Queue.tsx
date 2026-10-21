@@ -51,6 +51,7 @@ export default function Queue() {
         </div>
       </div>
       {jobs.map((j) => <JobRow key={j.Id} job={j} onCancel={() => api.mm.cancelJob(j.Id).then(q.reload)} />)}
+      {finished.length > 0 && <p className="hint">Finished, failed and cancelled conversions leave this list 45 minutes after they end.</p>}
     </>
   );
 }

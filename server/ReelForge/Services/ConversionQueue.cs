@@ -129,8 +129,31 @@ public sealed class ConversionQueue : BackgroundService
 
     private static PluginConfiguration Config => Plugin.Instance?.Configuration ?? new PluginConfiguration();
 
+    /// <summary>Finished, failed and cancelled conversions leave the list this long after they end.</summary>
+    public static readonly TimeSpan KeepFinishedFor = TimeSpan.FromMinutes(45);
+
+    internal static bool IsExpired(ConversionJob j, DateTime nowUtc) =>
+        j.Status is JobStatus.Done or JobStatus.Failed or JobStatus.Cancelled
+        && nowUtc - (j.FinishedUtc ?? j.StartedUtc ?? j.CreatedUtc) >= KeepFinishedFor;
+
+    /// <summary>Drops finished entries older than <see cref="KeepFinishedFor"/>. Returns how many went.</summary>
+    internal int RemoveExpired(DateTime nowUtc)
+    {
+        lock (_gate)
+        {
+            int n = _jobs.RemoveAll(j => IsExpired(j, nowUtc));
+            if (n > 0)
+            {
+                SaveJobs(force: true);
+            }
+
+            return n;
+        }
+    }
+
     public IReadOnlyList<ConversionJob> List()
     {
+        RemoveExpired(DateTime.UtcNow);
         lock (_gate)
         {
             return _jobs.OrderBy(j => j.Status switch
@@ -235,6 +258,7 @@ public sealed class ConversionQueue : BackgroundService
             try
             {
                 Housekeeping();
+                RemoveExpired(DateTime.UtcNow);
                 ConversionJob? next = null;
                 WaitingReason = WhyWait();
                 if (WaitingReason is null && Volatile.Read(ref _running) < Math.Clamp(Config.MaxConcurrentJobs, 1, 4))
