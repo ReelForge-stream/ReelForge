@@ -61,6 +61,9 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets a value indicating whether this server converts files itself, as well as any agents.</summary>
     public bool ConvertOnServer { get; set; } = true;
 
+    /// <summary>Gets or sets the OMDb API key used for IMDb and Rotten Tomatoes ratings (free at omdbapi.com).</summary>
+    public string OmdbApiKey { get; set; } = string.Empty;
+
     /// <summary>Gets or sets the key new agents (other PCs) use to pair with this server.</summary>
     public string AgentPairingKey { get; set; } = string.Empty;
 
@@ -89,6 +92,7 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<EncoderProbe>();
         serviceCollection.AddSingleton<SavingsLedger>();
         serviceCollection.AddSingleton<AgentRegistry>();
+        serviceCollection.AddSingleton<RatingsService>();
         serviceCollection.AddSingleton<ConversionQueue>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<ConversionQueue>());
         serviceCollection.AddSingleton<NetworkShares>();

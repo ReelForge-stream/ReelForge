@@ -38,7 +38,10 @@ public sealed class AgentRecord
     /// <summary>Gets or sets the GPU HEVC encoders that also passed a 10-bit test.</summary>
     public List<string> TenBitHevc { get; set; } = new();
 
-    public string? CurrentJobId { get; set; }
+    /// <summary>Gets or sets how many files this PC converts at the same time (1 to 4).</summary>
+    public int MaxJobs { get; set; } = 1;
+
+    public List<string> CurrentJobIds { get; set; } = new();
 
     public int FilesConverted { get; set; }
 
@@ -148,6 +151,7 @@ public sealed class AgentRegistry
                 SecretHash = Hash(secret),
                 Enabled = old?.Enabled ?? true,
                 AllowCpu = old?.AllowCpu ?? false,
+                MaxJobs = old?.MaxJobs ?? 1,
                 FilesConverted = old?.FilesConverted ?? 0,
                 BytesSaved = old?.BytesSaved ?? 0,
                 Os = os,

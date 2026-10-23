@@ -60,37 +60,42 @@ public sealed class AgentApiController : ControllerBase
             r.Encoders = req.Encoders ?? new();
             r.TenBitHevc = req.TenBitHevc ?? new();
             r.Address = Address;
-            r.CurrentJobId = req.JobId;
+            r.CurrentJobIds = (req.Jobs ?? new()).Select(j => j.JobId).ToList();
         });
 
         var stop = new List<string>();
-        AgentWork? work = null;
-        if (req.JobId is { } jobId)
+        int active = 0;
+        foreach (var j in req.Jobs ?? new())
         {
-            if (_queue.AgentShouldStop(a.Id, jobId))
+            if (_queue.AgentShouldStop(a.Id, j.JobId))
             {
-                stop.Add(jobId);
+                stop.Add(j.JobId);
+                continue;
             }
-            else if (req.Phase != "uploading")
-            {
-                _queue.AgentProgress(a.Id, jobId, req.Progress, req.Speed);
-            }
-            else
-            {
-                _queue.AgentProgress(a.Id, jobId, 0.999, null); // keeps it alive while the file comes back
-            }
-        }
-        else if (a.Enabled)
-        {
-            work = _queue.ClaimForAgent(a.Id, a.Name, a.Encoders, a.TenBitHevc, a.AllowCpu);
-            if (work is not null && a.LastError is not null)
-            {
-                _agents.Update(a.Id, r => r.LastError = null); // it's working again
-            }
+
+            active++;
+            // While a finished file uploads, just keep it alive; otherwise record progress.
+            _queue.AgentProgress(a.Id, j.JobId, j.Phase == "uploading" ? 0.999 : j.Progress, j.Phase == "uploading" ? null : j.Speed);
         }
 
-        return new AgentPollResponse(work, stop, ServerVersion, work is not null || req.JobId is not null ? 3 : 10, a.Enabled);
+        // Top the PC up to its "files at once".
+        var start = new List<AgentWork>();
+        int max = Math.Clamp(a.MaxJobs, 1, MaxJobsLimit);
+        while (a.Enabled && active + start.Count < max && _queue.ClaimForAgent(a.Id, a.Name, a.Encoders, a.TenBitHevc, a.AllowCpu) is { } work)
+        {
+            start.Add(work);
+        }
+
+        if (start.Count > 0 && a.LastError is not null)
+        {
+            _agents.Update(a.Id, r => r.LastError = null); // it's working again
+        }
+
+        return new AgentPollResponse(start, stop, ServerVersion, start.Count > 0 || active > 0 ? 3 : 10, a.Enabled, max);
     }
+
+    /// <summary>Most cards slow down past this many encodes at once (and GeForce cards cap NVENC sessions).</summary>
+    internal const int MaxJobsLimit = 4;
 
     /// <summary>The original file, for the agent's ffmpeg to read (resumable, seekable).</summary>
     [HttpGet("Jobs/{id}/Source")]
@@ -186,7 +191,7 @@ public sealed class AgentApiController : ControllerBase
     private AgentRecord? Agent() => _agents.Authenticate(Request.Headers[AgentProtocol.AuthHeader].ToString());
 }
 
-public sealed record AgentUpdateRequest(bool? Enabled, bool? AllowCpu, string? Name);
+public sealed record AgentUpdateRequest(bool? Enabled, bool? AllowCpu, string? Name, int? MaxJobs);
 
 /// <summary>The Agents page in Media Manager (admin only).</summary>
 [ApiController]
@@ -214,13 +219,14 @@ public sealed class AgentsController : ControllerBase
             ConvertOnServer = Plugin.Instance!.Configuration.ConvertOnServer,
             Agents = _agents.List().Select(a =>
             {
-                var job = jobs.FirstOrDefault(j => j.AgentId == a.Id && j.Status is JobStatus.Running or JobStatus.Verifying);
+                var mine = jobs.Where(j => j.AgentId == a.Id && j.Status is JobStatus.Running or JobStatus.Verifying).ToList();
                 return new
                 {
                     a.Id,
                     a.Name,
                     a.Enabled,
                     a.AllowCpu,
+                    a.MaxJobs,
                     Online = AgentRegistry.IsOnline(a),
                     a.LastSeenUtc,
                     a.PairedUtc,
@@ -233,7 +239,7 @@ public sealed class AgentsController : ControllerBase
                     a.FilesConverted,
                     a.BytesSaved,
                     a.LastError,
-                    Job = job is null ? null : new { job.Id, job.Title, job.Progress, job.Speed, job.EtaSeconds, job.Encoder, Status = job.Status.ToString() },
+                    Jobs = mine.Select(job => new { job.Id, job.Title, job.Progress, job.Speed, job.EtaSeconds, job.Encoder, Status = job.Status.ToString() }),
                 };
             }),
         });
@@ -255,6 +261,11 @@ public sealed class AgentsController : ControllerBase
             if (req.AllowCpu is { } c)
             {
                 a.AllowCpu = c;
+            }
+
+            if (req.MaxJobs is { } m)
+            {
+                a.MaxJobs = Math.Clamp(m, 1, AgentApiController.MaxJobsLimit);
             }
 
             if (!string.IsNullOrWhiteSpace(req.Name))

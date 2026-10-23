@@ -78,6 +78,8 @@ export default function General() {
         )}
       </Section>
 
+      <RatingsKey />
+
       <Section title="ReelForge" desc="ReelForge checks GitHub for updates every day and installs them by itself; the server restarts to finish.">
         <dl className="kv">
           <div><dt>Version</dt><dd>{version ?? '…'}</dd></div>
@@ -117,5 +119,54 @@ export default function General() {
         />
       )}
     </div>
+  );
+}
+
+/** OMDb key for IMDb and Rotten Tomatoes scores on title pages (saved right away, after a test lookup). */
+function RatingsKey() {
+  const api = useApi();
+  const toast = useToast();
+  const cfg = useAsync(() => api.mm.omdbSettings(), []);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async (k: string) => {
+    setBusy(true);
+    try {
+      await api.mm.saveOmdbKey(k);
+      toast(k ? 'Key works. IMDb and Rotten Tomatoes scores now show on title pages.' : 'OMDb key removed');
+      setKey('');
+      cfg.reload();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section
+      title="Ratings"
+      desc={
+        <>
+          IMDb and Rotten Tomatoes scores come from OMDb. Get a free key at{' '}
+          <a href="https://www.omdbapi.com/apikey.aspx" target="_blank" rel="noreferrer">omdbapi.com</a> (1,000 look-ups a day, plenty: each title is
+          looked up about once a week) and paste it here.
+        </>
+      }
+    >
+      <div className="omdb-row">
+        <input
+          className="input"
+          placeholder={cfg.data?.HasKey ? `Key saved (${cfg.data.KeyHint}). Paste a new one to replace it` : 'OMDb API key'}
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="OMDb API key"
+        />
+        <button className="btn primary" disabled={busy || !key.trim()} onClick={() => save(key)}>{busy ? 'Checking…' : 'Save key'}</button>
+        {cfg.data?.HasKey && <button className="btn ghost" disabled={busy} onClick={() => save('')}>Remove</button>}
+      </div>
+      {cfg.data && !cfg.data.HasKey && <p className="hint">Without a key, title pages show the ratings your library already has.</p>}
+    </Section>
   );
 }

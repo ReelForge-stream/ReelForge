@@ -77,7 +77,10 @@ export interface Item {
   UserData?: UserData;
   MediaSources?: MediaSource[];
   MediaStreams?: MediaStream[];
-  People?: { Name: string; Role?: string; Type: string }[];
+  People?: { Id?: string; Name: string; Role?: string; Type: string; PrimaryImageTag?: string }[];
+  CriticRating?: number;
+  EndDate?: string;
+  ProductionLocations?: string[];
   Studios?: { Name: string }[];
   DateCreated?: string;
   PremiereDate?: string;
@@ -411,6 +414,7 @@ export interface AgentInfo {
   Name: string;
   Enabled: boolean;
   AllowCpu: boolean;
+  MaxJobs: number;
   Online: boolean;
   LastSeenUtc: string;
   PairedUtc: string;
@@ -423,7 +427,7 @@ export interface AgentInfo {
   FilesConverted: number;
   BytesSaved: number;
   LastError?: string;
-  Job?: { Id: string; Title: string; Progress: number; Speed: number; EtaSeconds?: number; Encoder?: string; Status: string } | null;
+  Jobs: { Id: string; Title: string; Progress: number; Speed: number; EtaSeconds?: number; Encoder?: string; Status: string }[];
 }
 
 export interface AgentsResult {
@@ -431,4 +435,14 @@ export interface AgentsResult {
   ServerVersion: string;
   ConvertOnServer: boolean;
   Agents: AgentInfo[];
+}
+
+export interface Ratings {
+  ImdbId?: string;
+  Imdb?: number;
+  ImdbVotes?: number;
+  RottenTomatoes?: number;
+  Metacritic?: number;
+  Community?: number;
+  Source: 'omdb' | 'library';
 }

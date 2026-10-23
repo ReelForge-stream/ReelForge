@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,6 +46,9 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import stream.reelforge.tv.appState
 import stream.reelforge.tv.data.Item
+import stream.reelforge.tv.data.JellyfinApi
+import stream.reelforge.tv.data.Person
+import stream.reelforge.tv.data.Ratings
 import stream.reelforge.tv.ui.components.ContentRow
 import stream.reelforge.tv.ui.components.Icons
 import stream.reelforge.tv.ui.components.Meta
@@ -55,7 +60,7 @@ import stream.reelforge.tv.ui.theme.RF
 
 /** A movie or show: art, facts, Play / Resume / My List / Watched, seasons and episodes, more like this. */
 @Composable
-fun DetailsScreen(id: String, onPlay: (Item, Boolean) -> Unit, onOpen: (Item) -> Unit) {
+fun DetailsScreen(id: String, onPlay: (Item, Boolean) -> Unit, onOpen: (Item) -> Unit, onPerson: (String) -> Unit = {}) {
     val state = LocalContext.current.appState
     val api = state.api ?: return
     val scope = rememberCoroutineScope()
@@ -65,7 +70,9 @@ fun DetailsScreen(id: String, onPlay: (Item, Boolean) -> Unit, onOpen: (Item) ->
     var episodes by remember { mutableStateOf<List<Item>>(emptyList()) }
     var similar by remember { mutableStateOf<List<Item>>(emptyList()) }
     var reload by remember { mutableIntStateOf(0) }
+    var ratings by remember { mutableStateOf<Ratings?>(null) }
     val playFocus = remember { FocusRequester() }
+    LaunchedEffect(id) { ratings = runCatching { api.ratings(id) }.getOrNull() }
 
     LaunchedEffect(id, reload) {
         val it = runCatching { api.item(id) }.getOrNull() ?: return@LaunchedEffect
@@ -109,17 +116,16 @@ fun DetailsScreen(id: String, onPlay: (Item, Boolean) -> Unit, onOpen: (Item) ->
                         listOfNotNull(
                             it.ProductionYear?.toString(),
                             if (it.isSeries) seasons.size.takeIf { n -> n > 0 }?.let { n -> if (n == 1) "1 Season" else "$n Seasons" } else it.runtimeMinutes?.let { m -> if (m >= 60) "${m / 60}h ${m % 60}m" else "${m}m" },
-                            it.CommunityRating?.let { r -> "★ %.1f".format(r) },
+                            if (ratings?.Imdb == null) (ratings?.Community ?: it.CommunityRating)?.let { r -> "★ %.1f".format(r) } else null,
                         ),
                     )
+                    Scores(ratings)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         it.OfficialRating?.let { r -> Tag(r) }
                         it.Genres?.take(3)?.let { g -> Text(g.joinToString(" · "), color = RF.Muted, style = MaterialTheme.typography.bodyMedium) }
                     }
                     it.Taglines?.firstOrNull()?.let { t -> Text(t, style = MaterialTheme.typography.titleMedium, color = RF.Fg) }
                     it.Overview?.let { o -> Text(o, style = MaterialTheme.typography.bodyLarge, color = RF.Fg.copy(alpha = 0.88f), maxLines = 4, overflow = TextOverflow.Ellipsis) }
-                    val cast = it.People?.filter { p -> p.Type == "Actor" }?.take(4)?.joinToString(", ") { p -> p.Name }
-                    if (!cast.isNullOrBlank()) Text("Cast: $cast", style = MaterialTheme.typography.bodyMedium, color = RF.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         val target = if (it.isSeries) nextEp ?: episodes.firstOrNull() else it
@@ -172,9 +178,69 @@ fun DetailsScreen(id: String, onPlay: (Item, Boolean) -> Unit, onOpen: (Item) ->
                     }
                 }
             }
+            val cast = it.People?.filter { p -> p.Type == "Actor" }.orEmpty()
+            if (cast.isNotEmpty()) {
+                item { CastRow(cast, api, onPerson) }
+            }
             if (similar.isNotEmpty()) {
                 item {
                     ContentRow("More Like This", similar, { s -> api.image(s, "Thumb", 500) }, onOpen = onOpen, onFocusItem = {})
+                }
+            }
+        }
+    }
+}
+
+/** IMDb and Rotten Tomatoes (fresh at 60% and up) when the server has them. */
+@Composable
+private fun Scores(r: Ratings?) {
+    if (r == null || (r.Imdb == null && r.RottenTomatoes == null)) return
+    Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        r.Imdb?.let { v ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("IMDb", color = Color(0xFFF5C518), style = MaterialTheme.typography.labelLarge)
+                Text("%.1f".format(v), color = RF.Fg, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        r.RottenTomatoes?.let { v ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(12.dp).background(if (v >= 60) Color(0xFFE5402B) else Color(0xFF7FB04A), CircleShape))
+                Text("$v%", color = RF.Fg, style = MaterialTheme.typography.titleMedium)
+                Text("Rotten Tomatoes", color = RF.Muted, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+/** The cast as round photos; select one to see everything they're in on this server. */
+@Composable
+private fun CastRow(cast: List<Person>, api: JellyfinApi, onPerson: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Cast", style = MaterialTheme.typography.titleLarge, color = Color(0xFFDDE3E9), modifier = Modifier.padding(start = 56.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 56.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            items(cast.take(25), key = { p -> (p.Id ?: p.Name) + (p.Role ?: "") }) { p ->
+                Column(Modifier.width(120.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(
+                        onClick = { p.Id?.let(onPerson) },
+                        shape = ClickableSurfaceDefaults.shape(CircleShape),
+                        colors = ClickableSurfaceDefaults.colors(containerColor = RF.Surface, focusedContainerColor = RF.Surface),
+                        border = androidx.tv.material3.ClickableSurfaceDefaults.border(
+                            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, RF.Ember), shape = CircleShape),
+                        ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+                        modifier = Modifier.size(104.dp),
+                    ) {
+                        val img = p.Id?.let { id -> api.personImage(id, p.PrimaryImageTag, 220) }
+                        if (img != null) {
+                            AsyncImage(img, p.Name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        } else {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(p.Name.take(1), style = MaterialTheme.typography.headlineMedium, color = RF.Muted)
+                            }
+                        }
+                    }
+                    Text(p.Name, style = MaterialTheme.typography.labelLarge, color = RF.Fg, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    p.Role?.let { r -> Text(r, style = MaterialTheme.typography.bodySmall, color = RF.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
                 }
             }
         }

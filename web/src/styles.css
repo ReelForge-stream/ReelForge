@@ -1220,3 +1220,51 @@ code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-siz
   .add-pc-head { grid-template-columns: minmax(0, 1fr) auto; }
   .add-pc-head .hint { grid-column: 1 / -1; grid-row: 2; }
 }
+.agent-settings { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.agent-max { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 6px 12px; align-items: center; }
+.agent-max > span:first-child { font-weight: 600; }
+.agent-max .select { width: auto; min-width: 120px; }
+@media (max-width: 640px) { .agent-max { grid-template-columns: auto auto; } .agent-max .hint { grid-column: 1 / -1; } }
+
+/* ---------- Scores, cast, people ---------- */
+.scores { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.score { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 6px; background: rgba(232, 237, 242, 0.08); color: var(--fg); font-size: 14px; text-decoration: none; }
+.score strong { font-weight: 700; }
+.score-of { color: var(--muted); font-size: 12px; margin-left: -4px; }
+.score-label { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+.score.imdb .score-label { color: #F5C518; }
+a.score:hover { background: rgba(232, 237, 242, 0.14); }
+.score.rt.fresh svg { color: #E5402B; }
+.score.rt.rotten svg { color: #7FB04A; }
+.omdb-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.omdb-row .input { flex: 1 1 280px; max-width: 420px; }
+.person-link { color: inherit; text-decoration: underline; text-decoration-color: rgba(232, 237, 242, 0.3); text-underline-offset: 3px; }
+.person-link:hover { text-decoration-color: var(--ember); color: var(--fg); }
+.cast-row { list-style: none; margin: 0; padding: 0 0 6px; display: grid; grid-auto-flow: column; grid-auto-columns: 128px; gap: 16px; overflow-x: auto; scrollbar-width: thin; }
+.cast-card { display: grid; justify-items: center; gap: 6px; text-align: center; color: inherit; text-decoration: none; padding: 6px 4px; border-radius: var(--radius); }
+a.cast-card:hover .cast-photo { box-shadow: 0 0 0 3px var(--ember); }
+a.cast-card:hover .cast-name { color: var(--ember); }
+.cast-photo { display: grid; place-items: center; width: 104px; height: 104px; border-radius: 50%; overflow: hidden; background: var(--surface-2); transition: box-shadow 150ms; }
+.cast-photo img { width: 100%; height: 100%; object-fit: cover; }
+.cast-photo .person-initial { font-family: var(--display); font-size: 2.2rem; color: var(--muted); }
+.cast-name { font-weight: 600; font-size: 14px; line-height: 1.25; }
+.cast-role { color: var(--muted); font-size: 13px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cast-more { margin-top: 10px; }
+.person-page { padding-top: calc(var(--bar) + 32px); }
+.person-head { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; margin-bottom: 36px; max-width: 1100px; }
+.person-photo { width: 200px; aspect-ratio: 2 / 3; border-radius: var(--radius); overflow: hidden; background: var(--surface); display: grid; place-items: center; }
+.person-photo img { width: 100%; height: 100%; object-fit: cover; }
+.person-photo .person-initial { font-family: var(--display); font-size: 4rem; color: var(--muted); }
+.person-info { display: grid; gap: 10px; align-content: start; }
+.person-info h1 { font-size: var(--s5); line-height: 1; }
+.person-bio { line-height: 1.55; max-width: 75ch; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.person-bio.open { display: block; }
+.more-link.as-button { background: none; border: 0; padding: 0; justify-self: start; cursor: pointer; color: var(--ember); font: inherit; }
+.person-show { display: grid; gap: 4px; }
+@media (max-width: 700px) {
+  .person-head { grid-template-columns: 110px minmax(0, 1fr); gap: 18px; }
+  .person-photo { width: 110px; }
+  .person-info h1 { font-size: var(--s3); }
+  .cast-row { grid-auto-columns: 100px; }
+  .cast-photo { width: 84px; height: 84px; }
+}

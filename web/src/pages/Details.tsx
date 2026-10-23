@@ -143,12 +143,10 @@ function DetailsBody({ item }: { item: Item }) {
             {!isSeries && item.RunTimeTicks ? <span>{hm(item.RunTimeTicks)}</span> : null}
             {quality && <span className="quality">{quality}</span>}
           </div>
-          {item.OfficialRating && (
-            <div className="meta-line">
-              <span className="rating-box">{item.OfficialRating}</span>
-              {item.CommunityRating ? <span className="meta-dim">★ {item.CommunityRating.toFixed(1)}</span> : null}
-            </div>
-          )}
+          <div className="meta-line">
+            {item.OfficialRating && <span className="rating-box">{item.OfficialRating}</span>}
+            <Scores item={item} />
+          </div>
           {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
           {item.Overview && <p className="details-overview">{item.Overview}</p>}
         </div>
@@ -156,8 +154,13 @@ function DetailsBody({ item }: { item: Item }) {
           {cast.length > 0 && (
             <p>
               <span className="meta-dim">Cast: </span>
-              {cast.slice(0, 3).map((p) => p.Name).join(', ')}
-              {cast.length > 3 && <>, <a href="#about" className="more-link">more</a></>}
+              {cast.slice(0, 3).map((p, i) => (
+                <span key={p.Id ?? p.Name}>
+                  {i > 0 && ', '}
+                  {p.Id ? <Link className="person-link" to={`/person/${p.Id}`}>{p.Name}</Link> : p.Name}
+                </span>
+              ))}
+              {cast.length > 3 && <>, <a href="#cast" className="more-link">more</a></>}
             </p>
           )}
           {item.Genres?.length ? <p><span className="meta-dim">Genres: </span>{item.Genres.join(', ')}</p> : null}
@@ -189,6 +192,8 @@ function DetailsBody({ item }: { item: Item }) {
         </section>
       )}
 
+      {cast.length > 0 && <CastRow cast={cast} />}
+
       {similar.data && similar.data.length > 0 && (
         <section className="details-section">
           <div className="section-head"><h2>More Like This</h2></div>
@@ -208,7 +213,17 @@ function DetailsBody({ item }: { item: Item }) {
       <section className="details-section about" id="about">
         <h2>About <strong>{item.Name}</strong></h2>
         {directors.length > 0 && <p><span className="meta-dim">Director: </span>{directors.map((p) => p.Name).join(', ')}</p>}
-        {cast.length > 0 && <p><span className="meta-dim">Cast: </span>{cast.slice(0, 15).map((p) => p.Name).join(', ')}</p>}
+        {cast.length > 0 && (
+          <p>
+            <span className="meta-dim">Cast: </span>
+            {cast.slice(0, 15).map((p, i) => (
+              <span key={p.Id ?? p.Name}>
+                {i > 0 && ', '}
+                {p.Id ? <Link className="person-link" to={`/person/${p.Id}`}>{p.Name}</Link> : p.Name}
+              </span>
+            ))}
+          </p>
+        )}
         {writers.length > 0 && <p><span className="meta-dim">Writer: </span>{writers.map((p) => p.Name).join(', ')}</p>}
         {item.Genres?.length ? <p><span className="meta-dim">Genres: </span>{item.Genres.join(', ')}</p> : null}
         {item.OfficialRating && <p><span className="meta-dim">Maturity rating: </span><span className="rating-box">{item.OfficialRating}</span></p>}
@@ -278,4 +293,76 @@ function SimilarCard({ item: given }: { item: Item }) {
 function hm(ticks: number): string {
   const m = Math.round(ticks / 6e8);
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+}
+
+/** IMDb and Rotten Tomatoes scores (from OMDb when the server has a key; otherwise what the library has). */
+function Scores({ item }: { item: Item }) {
+  const api = useApi();
+  const r = useAsync(() => api.ratings(item.Id).catch(() => null), [item.Id]);
+  const d = r.data;
+  if (!d) return item.CommunityRating ? <span className="meta-dim">★ {item.CommunityRating.toFixed(1)}</span> : null;
+  const imdbUrl = d.ImdbId ? `https://www.imdb.com/title/${d.ImdbId}/` : undefined;
+  return (
+    <span className="scores">
+      {d.Imdb != null && (
+        <a className="score imdb" href={imdbUrl} target="_blank" rel="noreferrer" title={d.ImdbVotes ? `IMDb · ${d.ImdbVotes.toLocaleString()} votes` : 'IMDb'}>
+          <span className="score-label">IMDb</span>
+          <strong>{d.Imdb.toFixed(1)}</strong>
+          <span className="score-of">/10</span>
+        </a>
+      )}
+      {d.RottenTomatoes != null && (
+        <span className={`score rt ${d.RottenTomatoes >= 60 ? 'fresh' : 'rotten'}`} title={`Rotten Tomatoes Tomatometer: ${d.RottenTomatoes >= 60 ? 'fresh' : 'rotten'}`}>
+          <TomatoIcon fresh={d.RottenTomatoes >= 60} />
+          <strong>{d.RottenTomatoes}%</strong>
+          <span className="score-label">Rotten Tomatoes</span>
+        </span>
+      )}
+      {d.Imdb == null && d.Community != null && (
+        <span className="meta-dim" title="Audience rating from your library’s metadata">★ {d.Community.toFixed(1)}</span>
+      )}
+    </span>
+  );
+}
+
+/** A plain tomato (fresh) or splat (rotten): our own drawing, not Rotten Tomatoes' logo. */
+function TomatoIcon({ fresh }: { fresh: boolean }) {
+  return fresh ? (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <circle cx="12" cy="13.5" r="8" fill="currentColor" />
+      <path d="M12 5.5c-1.2-1.6-3-2.1-4.6-1.6 1.1.5 2 1.4 2.4 2.6M12 5.5c1-1.6 2.9-2.2 4.6-1.7-1.1.5-2.1 1.4-2.5 2.6M12 5.5V3" stroke="#3FA34D" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M12 4l1.6 4.2 4.4-1.6-1.8 4.3 4.3 1.7-4.4 1.6 1.7 4.4-4.3-1.9-1.5 4.3-1.6-4.3-4.3 1.9 1.8-4.4-4.4-1.6 4.3-1.7-1.8-4.3 4.4 1.6z" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** The cast as a row of photos; each opens that person's page (everything they're in on this server). */
+function CastRow({ cast }: { cast: NonNullable<Item['People']> }) {
+  const api = useApi();
+  const [all, setAll] = useState(false);
+  const shown = all ? cast : cast.slice(0, 12);
+  return (
+    <section className="details-section" id="cast">
+      <div className="section-head"><h2>Cast</h2></div>
+      <ul className="cast-row">
+        {shown.map((p) => {
+          const img = p.Id && p.PrimaryImageTag ? api.imageUrl(p.Id, 'Primary', p.PrimaryImageTag, 240) : undefined;
+          const body = (
+            <>
+              <span className="cast-photo">{img ? <img src={img} alt="" loading="lazy" /> : <span className="person-initial">{p.Name.trim().charAt(0)}</span>}</span>
+              <span className="cast-name">{p.Name}</span>
+              {p.Role && <span className="cast-role">{p.Role}</span>}
+            </>
+          );
+          return <li key={`${p.Id ?? p.Name}-${p.Role ?? ''}`}>{p.Id ? <Link to={`/person/${p.Id}`} className="cast-card">{body}</Link> : <div className="cast-card">{body}</div>}</li>;
+        })}
+      </ul>
+      {cast.length > 12 && (
+        <button className="btn sm ghost cast-more" onClick={() => setAll((x) => !x)}>{all ? 'Show fewer' : `Show all ${cast.length}`}</button>
+      )}
+    </section>
+  );
 }

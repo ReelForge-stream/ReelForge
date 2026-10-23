@@ -31,6 +31,7 @@ import SettingsPlayback from './settings/Playback';
 import SettingsNetwork from './settings/Network';
 import SettingsActivity, { WatchingBadge } from './settings/Activity';
 import Downloads from './pages/Downloads';
+import Person from './pages/Person';
 import { DownloadWatcher, useCanDownload } from './lib/download';
 import { InstallBanner, InstallMenuItem } from './lib/install';
 
@@ -111,6 +112,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
           <Route path="list" element={<MyList />} />
           <Route path="search" element={<Search />} />
           <Route path="downloads" element={<Downloads />} />
+          <Route path="person/:id" element={<Person />} />
           {api.isAdmin && (
             <Route path="manager" element={<ManagerLayout />}>
               <Route index element={<ManagerOverview />} />

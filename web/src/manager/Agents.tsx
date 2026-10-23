@@ -17,9 +17,9 @@ export default function Agents() {
   if (!data.data) return <p className="muted">Looking for agents…</p>;
   const d = data.data;
   const online = d.Agents.filter((a) => a.Online);
-  const busy = d.Agents.filter((a) => a.Job);
+  const converting = d.Agents.reduce((n, a) => n + a.Jobs.length, 0);
 
-  const change = async (a: AgentInfo, c: { Enabled?: boolean; AllowCpu?: boolean }, msg: string) => {
+  const change = async (a: AgentInfo, c: { Enabled?: boolean; AllowCpu?: boolean; MaxJobs?: number }, msg: string) => {
     try {
       await api.mm.updateAgent(a.Id, c);
       toast(msg);
@@ -41,8 +41,8 @@ export default function Agents() {
           <div className="v">online now</div>
         </div>
         <div>
-          <div className="k">{busy.length}</div>
-          <div className="v">converting right now</div>
+          <div className="k">{converting}</div>
+          <div className="v">{converting === 1 ? 'file converting right now' : 'files converting right now'}</div>
         </div>
       </div>
 
@@ -69,6 +69,7 @@ export default function Agents() {
               serverVersion={d.ServerVersion}
               onToggle={() => change(a, { Enabled: !a.Enabled }, a.Enabled ? `${a.Name} paused` : `${a.Name} will take files again`)}
               onCpu={(v) => change(a, { AllowCpu: v }, v ? `${a.Name} may use its processor` : `${a.Name} uses its graphics card only`)}
+              onMaxJobs={(n) => change(a, { MaxJobs: n }, `${a.Name} converts ${n === 1 ? 'one file' : `${n} files`} at a time`)}
               onRemove={() => setRemoving(a)}
             />
           ))}
@@ -101,11 +102,11 @@ export default function Agents() {
   );
 }
 
-function AgentCard({ a, serverVersion, onToggle, onCpu, onRemove }: { a: AgentInfo; serverVersion: string; onToggle: () => void; onCpu: (v: boolean) => void; onRemove: () => void }) {
+function AgentCard({ a, serverVersion, onToggle, onCpu, onMaxJobs, onRemove }: { a: AgentInfo; serverVersion: string; onToggle: () => void; onCpu: (v: boolean) => void; onMaxJobs: (n: number) => void; onRemove: () => void }) {
   const gpuEncoders = a.Encoders.filter((e) => /nvenc|amf/.test(e));
   const outdated = a.Version && a.Version !== serverVersion;
-  const state = !a.Online ? 'offline' : !a.Enabled ? 'paused' : a.Job ? 'busy' : gpuEncoders.length || a.AllowCpu ? 'ready' : 'nogpu';
-  const label = { offline: `Offline · last seen ${timeAgo(a.LastSeenUtc)}`, paused: 'Paused', busy: 'Converting', ready: 'Ready for files', nogpu: 'No usable graphics card' }[state];
+  const state = !a.Online ? 'offline' : !a.Enabled ? 'paused' : a.Jobs.length ? 'busy' : gpuEncoders.length || a.AllowCpu ? 'ready' : 'nogpu';
+  const label = { offline: `Offline · last seen ${timeAgo(a.LastSeenUtc)}`, paused: 'Paused', busy: a.Jobs.length > 1 ? `Converting ${a.Jobs.length} files` : 'Converting', ready: 'Ready for files', nogpu: 'No usable graphics card' }[state];
   return (
     <article className={`agent-card ${state}`}>
       <header className="agent-head">
@@ -120,18 +121,18 @@ function AgentCard({ a, serverVersion, onToggle, onCpu, onRemove }: { a: AgentIn
         </div>
       </header>
 
-      {a.Job && (
-        <div className="agent-job">
+      {a.Jobs.map((j) => (
+        <div key={j.Id} className="agent-job">
           <div className="agent-job-line">
-            <span>{a.Job.Title}</span>
+            <span>{j.Title}</span>
             <span className="hint">
-              {a.Job.Status === 'Verifying' ? 'Checking the result…' : `${Math.round(a.Job.Progress * 100)}%${a.Job.Speed ? ` · ${a.Job.Speed.toFixed(1)}× real time` : ''}`}
-              {a.Job.Encoder ? ` · ${encoderLabel(a.Job.Encoder)}` : ''}
+              {j.Status === 'Verifying' ? 'Checking the result…' : `${Math.round(j.Progress * 100)}%${j.Speed ? ` · ${j.Speed.toFixed(1)}× real time` : ''}`}
+              {j.Encoder ? ` · ${encoderLabel(j.Encoder)}` : ''}
             </span>
           </div>
-          <div className="bar"><span style={{ width: `${Math.max(2, a.Job.Progress * 100)}%` }} /></div>
+          <div className="bar"><span style={{ width: `${Math.max(2, j.Progress * 100)}%` }} /></div>
         </div>
-      )}
+      ))}
 
       <dl className="agent-facts">
         <div>
@@ -158,10 +159,19 @@ function AgentCard({ a, serverVersion, onToggle, onCpu, onRemove }: { a: AgentIn
         </div>
       </dl>
       {a.LastError && <p className="hint agent-error">Last problem: {a.LastError}</p>}
+      <div className="agent-settings">
+        <label className="agent-max">
+          <span>Files at once</span>
+          <select className="select" value={a.MaxJobs} onChange={(e) => onMaxJobs(Number(e.target.value))}>
+            {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}{n === 1 ? ' (default)' : ''}</option>)}
+          </select>
+          <span className="hint">More than one helps on fast cards (RTX 30/40, Radeon RX 6000/7000). GeForce cards allow up to 8 encodes at once, but past 2–3 each one slows down.</span>
+        </label>
       <label className="agent-cpu">
         <input type="checkbox" checked={a.AllowCpu} onChange={(e) => onCpu(e.target.checked)} />
         Use its processor when the graphics card can’t do a file (much slower)
       </label>
+      </div>
     </article>
   );
 }

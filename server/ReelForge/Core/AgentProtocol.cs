@@ -16,21 +16,24 @@ public sealed record AgentRegisterRequest(string Key, string Name, string? Os, s
 
 public sealed record AgentRegisterResponse(string AgentId, string Secret, string ServerVersion);
 
-/// <summary>Sent every few seconds: what the PC can do and how the current file is going.</summary>
+/// <summary>How one file the agent is working on is going.</summary>
+public sealed record AgentJobStatus(string JobId, double Progress, double? Speed, string? Phase);
+
+/// <summary>Sent every few seconds: what the PC can do and how each of its files is going.</summary>
 public sealed record AgentPollRequest(
     string? Version,
     List<string> Gpus,
     List<string> Encoders,
     List<string> TenBitHevc,
-    string? JobId,
-    double Progress,
-    double? Speed,
-    string? Phase);
+    List<AgentJobStatus> Jobs);
 
 /// <summary>What an agent is told to do: ffmpeg arguments with {input}/{output} placeholders.</summary>
 public sealed record AgentWork(string JobId, string Title, IReadOnlyList<string> Args, long DurationTicks, string SourceToken, string Encoder, long EstimatedBytes);
 
-/// <summary>The reply: maybe a file to convert, files to stop, and the server's version (agents update to match).</summary>
-public sealed record AgentPollResponse(AgentWork? Job, List<string> Stop, string ServerVersion, int PollSeconds, bool Enabled);
+/// <summary>
+/// The reply: new files to start (never more than the agent's "files at once" allows), files to stop,
+/// and the server's version (agents update to match).
+/// </summary>
+public sealed record AgentPollResponse(List<AgentWork> Start, List<string> Stop, string ServerVersion, int PollSeconds, bool Enabled, int MaxJobs);
 
 public sealed record AgentFailRequest(string Error);

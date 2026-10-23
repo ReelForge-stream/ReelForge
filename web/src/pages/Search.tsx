@@ -103,7 +103,7 @@ export default function Search() {
           <h2>Cast &amp; crew</h2>
           <div className="person-chips">
             {people.map((p) => (
-              <button key={p.Id} className="person-chip" onClick={() => { setTerm(''); nav(`/search?person=${p.Id}&name=${encodeURIComponent(p.Name)}`); }}>
+              <button key={p.Id} className="person-chip" onClick={() => nav(`/person/${p.Id}`)}>
                 <span className="suggest-pic round"><PersonPic p={p} /></span>
                 {p.Name}
               </button>

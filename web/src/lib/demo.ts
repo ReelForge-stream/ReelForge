@@ -500,12 +500,13 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     return {
       PairingKey: 'K7PD-2WQX-HN4M', ServerVersion: '0.9.0', ConvertOnServer: true,
       Agents: [
-        { Id: 'a1', Name: 'GAMING-PC', Enabled: true, AllowCpu: false, Online: true, LastSeenUtc: new Date().toISOString(), PairedUtc: new Date(Date.now() - 864e5).toISOString(), Version: '0.9.0', Os: 'Windows 11', Address: '192.168.1.42', Gpus: ['NVIDIA GeForce RTX 3080'], Encoders: ['hevc_nvenc', 'av1_nvenc'], TenBitHevc: ['hevc_nvenc'], FilesConverted: 37, BytesSaved: 412 * GB, Job: { Id: 'j9', Title: 'Signal Hill (2024)', Progress: 0.42, Speed: 6.3, Encoder: 'hevc_nvenc', Status: 'Running' } },
-        { Id: 'a2', Name: 'OFFICE-PC', Enabled: true, AllowCpu: false, Online: false, LastSeenUtc: new Date(Date.now() - 7.2e6).toISOString(), PairedUtc: new Date(Date.now() - 864e5).toISOString(), Version: '0.9.0', Os: 'Windows 10', Address: '192.168.1.57', Gpus: ['AMD Radeon RX 6700 XT'], Encoders: ['hevc_amf'], TenBitHevc: ['hevc_amf'], FilesConverted: 9, BytesSaved: 88 * GB, Job: null },
+        { Id: 'a1', Name: 'GAMING-PC', Enabled: true, AllowCpu: false, MaxJobs: 2, Online: true, LastSeenUtc: new Date().toISOString(), PairedUtc: new Date(Date.now() - 864e5).toISOString(), Version: '0.9.0', Os: 'Windows 11', Address: '192.168.1.42', Gpus: ['NVIDIA GeForce RTX 3080'], Encoders: ['hevc_nvenc', 'av1_nvenc'], TenBitHevc: ['hevc_nvenc'], FilesConverted: 37, BytesSaved: 412 * GB, Jobs: [{ Id: 'j9', Title: 'Signal Hill (2024)', Progress: 0.42, Speed: 6.3, Encoder: 'hevc_nvenc', Status: 'Running' }, { Id: 'j10', Title: 'Deep Field (2021)', Progress: 0.08, Speed: 5.1, Encoder: 'hevc_nvenc', Status: 'Running' }] },
+        { Id: 'a2', Name: 'OFFICE-PC', Enabled: true, AllowCpu: false, MaxJobs: 1, Online: false, LastSeenUtc: new Date(Date.now() - 7.2e6).toISOString(), PairedUtc: new Date(Date.now() - 864e5).toISOString(), Version: '0.9.0', Os: 'Windows 10', Address: '192.168.1.57', Gpus: ['AMD Radeon RX 6700 XT'], Encoders: ['hevc_amf'], TenBitHevc: ['hevc_amf'], FilesConverted: 9, BytesSaved: 88 * GB, Jobs: [] },
       ],
     };
   }
   if (p.startsWith('/ReelForge/Agents')) return undefined;
+  if (p === '/ReelForge/Ratings/Settings') return method === 'GET' ? { HasKey: true, KeyHint: '••••a1b2' } : undefined;
   if (p === '/ReelForge/LibraryScan') return method === 'GET' ? { Minutes: 5, Running: false } : undefined;
   if (p === '/ReelForge/Holding') return held;
   if (p === '/ReelForge/Holding/EmptyAll') { const b = held.reduce((a, h) => a + h.SizeBytes, 0); held = []; return { FreedBytes: b }; }

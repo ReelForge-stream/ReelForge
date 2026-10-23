@@ -88,7 +88,7 @@ export default function SearchBox() {
       close();
       return;
     }
-    if (r.kind === 'person') nav(`/search?person=${r.item.Id}&name=${encodeURIComponent(r.item.Name)}`);
+    if (r.kind === 'person') nav(`/person/${r.item.Id}`);
     else {
       const bg = (location.state as { background?: unknown } | null)?.background ?? location;
       nav(`/item/${r.item.Id}`, { state: { background: bg } });

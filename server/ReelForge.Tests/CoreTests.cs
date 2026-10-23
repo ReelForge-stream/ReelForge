@@ -811,3 +811,30 @@ public class AgentTests
         Assert.EndsWith("{output}", a);
     }
 }
+
+public class RatingsTests
+{
+    [Fact]
+    public void Reads_imdb_and_rotten_tomatoes_from_omdb()
+    {
+        const string json = """
+            {"Title":"The Shawshank Redemption","Metascore":"82","imdbRating":"9.3","imdbVotes":"3,021,407",
+             "Ratings":[{"Source":"Internet Movie Database","Value":"9.3/10"},{"Source":"Rotten Tomatoes","Value":"89%"},{"Source":"Metacritic","Value":"82/100"}],
+             "Response":"True"}
+            """;
+        var r = RatingsService.Parse("tt0111161", json, out var err)!;
+        Assert.Null(err);
+        Assert.Equal(9.3, r.Imdb);
+        Assert.Equal(3_021_407, r.ImdbVotes);
+        Assert.Equal(89, r.RottenTomatoes);
+        Assert.Equal(82, r.Metacritic);
+        Assert.Equal("omdb", r.Source);
+
+        var noRt = RatingsService.Parse("tt1", """{"imdbRating":"N/A","imdbVotes":"N/A","Ratings":[],"Response":"True"}""", out _)!;
+        Assert.Null(noRt.Imdb);
+        Assert.Null(noRt.RottenTomatoes);
+
+        Assert.Null(RatingsService.Parse("tt1", """{"Response":"False","Error":"Invalid API key!"}""", out var bad));
+        Assert.Equal("Invalid API key!", bad);
+    }
+}

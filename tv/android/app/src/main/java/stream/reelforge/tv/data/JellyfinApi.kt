@@ -146,6 +146,14 @@ class JellyfinApi(
     suspend fun episodes(seriesId: String, seasonId: String): List<Item> =
         get<ItemsResult>("/Shows/$seriesId/Episodes?userId=$uid&seasonId=$seasonId&fields=Overview").Items
 
+    suspend fun ratings(id: String): Ratings = get("/ReelForge/Ratings/$id")
+
+    /** Movies, shows and episodes a person is in, newest first. */
+    suspend fun appearances(personId: String): List<Item> =
+        get<ItemsResult>("/Items?userId=$uid&recursive=true&personIds=$personId&includeItemTypes=Movie,Series,Episode&sortBy=ProductionYear,PremiereDate,SortName&sortOrder=Descending&fields=$FIELDS&limit=500&enableTotalRecordCount=false").Items
+
+    fun personImage(id: String, tag: String?, size: Int): String? = tag?.let { "$server/Items/$id/Images/Primary?fillWidth=$size&fillHeight=$size&quality=90&tag=$it" }
+
     /** Every episode of a show in order (to carry on into the next season). */
     suspend fun allEpisodes(seriesId: String): List<Item> =
         get<ItemsResult>("/Shows/$seriesId/Episodes?userId=$uid&fields=Overview").Items

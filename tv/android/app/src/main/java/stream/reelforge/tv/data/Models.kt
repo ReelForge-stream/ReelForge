@@ -68,6 +68,10 @@ data class Item(
     val MediaSources: List<MediaSource>? = null,
     val Taglines: List<String>? = null,
     val DateCreated: String? = null,
+    val CriticRating: Double? = null,
+    val PremiereDate: String? = null,
+    val EndDate: String? = null,
+    val ProductionLocations: List<String>? = null,
 ) {
     val isSeries get() = Type == "Series"
     val isEpisode get() = Type == "Episode"
@@ -81,7 +85,7 @@ data class Item(
 }
 
 @Serializable
-data class Person(val Name: String, val Role: String? = null, val Type: String = "")
+data class Person(val Name: String, val Role: String? = null, val Type: String = "", val Id: String? = null, val PrimaryImageTag: String? = null)
 
 @Serializable
 data class NameRef(val Name: String, val Id: String? = null)
@@ -135,3 +139,15 @@ data class DiscoveredServer(val Address: String, val Id: String = "", val Name: 
 
 /** Everything needed to talk to the server as one profile. */
 data class Session(val server: String, val token: String, val userId: String, val userName: String, val isAdmin: Boolean, val imageTag: String?)
+
+/** IMDb / Rotten Tomatoes scores from the server (looked up through OMDb and cached there). */
+@Serializable
+data class Ratings(
+    val ImdbId: String? = null,
+    val Imdb: Double? = null,
+    val ImdbVotes: Int? = null,
+    val RottenTomatoes: Int? = null,
+    val Metacritic: Int? = null,
+    val Community: Double? = null,
+    val Source: String = "library",
+)

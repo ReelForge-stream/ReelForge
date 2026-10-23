@@ -1,6 +1,6 @@
 import type {
   ActiveSession, ActivityEntry, AdminUser, DupGroup, HeldFile, Item, Job, MediaSource, Overview, ScheduledTask, Session, Settings,
-  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult, SavingsResult, AgentsResult,
+  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult, SavingsResult, AgentsResult, Ratings,
 } from './types';
 import { demo } from './demo';
 import { describeDevice } from './device';
@@ -117,10 +117,18 @@ export class Api {
     if (!res.ok) {
       let msg = `${res.status} ${res.statusText}`;
       try {
-        const j = await res.json();
-        msg = j.error ?? j.title ?? msg;
+        // The server explains itself as JSON ({ error } / problem details), a JSON string, or plain text.
+        const text = (await res.text()).trim();
+        if (text) {
+          try {
+            const j = JSON.parse(text);
+            msg = typeof j === 'string' ? j : j.error ?? j.detail ?? j.title ?? msg;
+          } catch {
+            if (text.length < 300 && !text.startsWith('<')) msg = text;
+          }
+        }
       } catch {
-        /* not JSON */
+        /* no body */
       }
       throw new ApiError(res.status, msg);
     }
@@ -217,6 +225,19 @@ export class Api {
     return this.get<{ Items: Item[] }>(
       `/Items?userId=${this.userId}&recursive=true&personIds=${personId}&includeItemTypes=Movie,Series&sortBy=ProductionYear,SortName&sortOrder=Descending&fields=${Api.fields}&limit=200`,
     ).then((r) => r.Items);
+  }
+
+  /** Everything a person is in: movies and shows, plus episodes they guest in (grouped under their show by the page). */
+  appearances(personId: string) {
+    return this.get<{ Items: Item[] }>(
+      `/Items?userId=${this.userId}&recursive=true&personIds=${personId}&includeItemTypes=Movie,Series,Episode&sortBy=ProductionYear,PremiereDate,SortName&sortOrder=Descending&fields=${Api.fields}&limit=500&enableTotalRecordCount=false`,
+    ).then((r) => r.Items);
+  }
+
+  /** IMDb / Rotten Tomatoes scores (looked up and cached by the server). */
+  ratings(itemId: string) {
+    if (isDemo) return Promise.resolve<Ratings>({ Imdb: 7.9, ImdbVotes: 412000, RottenTomatoes: 91, Source: 'omdb' });
+    return this.get<Ratings>(`/ReelForge/Ratings/${itemId}`);
   }
 
   item(id: string) {
@@ -497,9 +518,11 @@ export class Api {
     overview: () => this.get<Overview>('/ReelForge/Overview'),
     savings: () => this.get<SavingsResult>('/ReelForge/Savings'),
     agents: () => this.get<AgentsResult>('/ReelForge/Agents'),
-    updateAgent: (id: string, change: { Enabled?: boolean; AllowCpu?: boolean; Name?: string }) => this.post(`/ReelForge/Agents/${id}`, change),
+    updateAgent: (id: string, change: { Enabled?: boolean; AllowCpu?: boolean; Name?: string; MaxJobs?: number }) => this.post(`/ReelForge/Agents/${id}`, change),
     removeAgent: (id: string) => this.del(`/ReelForge/Agents/${id}`),
     newAgentKey: () => this.post<{ PairingKey: string }>('/ReelForge/Agents/NewKey'),
+    omdbSettings: () => this.get<{ HasKey: boolean; KeyHint?: string }>('/ReelForge/Ratings/Settings'),
+    saveOmdbKey: (Key: string) => this.post('/ReelForge/Ratings/Settings', { Key }),
     convertOnServer: (on: boolean) => this.post(`/ReelForge/Agents/ConvertOnServer?on=${on}`),
     libraryScan: () => this.get<{ Minutes: number; Running: boolean; LastEndUtc?: string }>('/ReelForge/LibraryScan'),
     setLibraryScan: (Minutes: number) => this.post('/ReelForge/LibraryScan', { Minutes }),

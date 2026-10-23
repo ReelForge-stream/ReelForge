@@ -19,7 +19,7 @@ public sealed class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly HttpClient _http;
     private Capabilities _caps = new(new(), new(), new());
-    private Running? _current;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Running> _running = new();
     private string? _updateTriedFor;
 
     private sealed class Running
@@ -67,14 +67,14 @@ public sealed class Worker : BackgroundService
             try
             {
                 // Drivers get updated, cards get swapped: re-test now and then while idle.
-                if (_current is null && DateTime.UtcNow - lastProbe > TimeSpan.FromHours(6))
+                if (_running.IsEmpty && DateTime.UtcNow - lastProbe > TimeSpan.FromHours(6))
                 {
                     _caps = await Probe.RunAsync(_options.Ffmpeg, _options.AllowCpu, stop);
                     lastProbe = DateTime.UtcNow;
                 }
 
-                var cur = _current;
-                var req = new AgentPollRequest(Version, _caps.Gpus, _caps.Encoders, _caps.TenBitHevc, cur?.Work.JobId, cur?.Progress ?? 0, cur?.Speed, cur?.Phase);
+                var jobs = _running.Values.Select(r => new AgentJobStatus(r.Work.JobId, r.Progress, r.Speed, r.Phase)).ToList();
+                var req = new AgentPollRequest(Version, _caps.Gpus, _caps.Encoders, _caps.TenBitHevc, jobs);
                 using var resp = await _http.PostAsJsonAsync("ReelForge/AgentApi/Poll", req, stop);
                 if (resp.StatusCode == HttpStatusCode.Unauthorized)
                 {
@@ -86,18 +86,22 @@ public sealed class Worker : BackgroundService
                     resp.EnsureSuccessStatusCode();
                     var r = (await resp.Content.ReadFromJsonAsync<AgentPollResponse>(stop))!;
                     wait = r.PollSeconds;
-                    if (cur is not null && r.Stop.Contains(cur.Work.JobId))
+                    foreach (var id in r.Stop)
                     {
-                        _logger.LogInformation("Stopping {Title}: cancelled on the server", cur.Work.Title);
-                        cur.Cancel.Cancel();
+                        if (_running.TryGetValue(id, out var run))
+                        {
+                            _logger.LogInformation("Stopping {Title}: cancelled on the server", run.Work.Title);
+                            run.Cancel.Cancel();
+                        }
                     }
 
-                    if (r.Job is { } job && _current is null)
+                    foreach (var job in r.Start.Where(j => !_running.ContainsKey(j.JobId)))
                     {
                         Start(job, stop);
                         wait = 1;
                     }
-                    else if (_current is null)
+
+                    if (_running.IsEmpty && r.Start.Count == 0)
                     {
                         await MaybeUpdateAsync(r.ServerVersion, stop);
                     }
@@ -123,13 +127,16 @@ public sealed class Worker : BackgroundService
             }
         }
 
-        _current?.Cancel.Cancel();
+        foreach (var r in _running.Values)
+        {
+            r.Cancel.Cancel();
+        }
     }
 
     private void Start(AgentWork work, CancellationToken stop)
     {
         var run = new Running { Work = work, Cancel = CancellationTokenSource.CreateLinkedTokenSource(stop) };
-        _current = run;
+        _running[work.JobId] = run;
         _ = Task.Run(async () =>
         {
             string output = Path.Combine(WorkDir, $"{work.JobId}.mkv");
@@ -156,8 +163,8 @@ public sealed class Worker : BackgroundService
             finally
             {
                 TryDelete(output);
+                _running.TryRemove(work.JobId, out _);
                 run.Cancel.Dispose();
-                _current = null;
             }
         });
     }
@@ -167,7 +174,8 @@ public sealed class Worker : BackgroundService
         var w = run.Work;
         Directory.CreateDirectory(WorkDir);
         long free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(WorkDir))!).AvailableFreeSpace;
-        if (free < w.EstimatedBytes * 1.3 + (1L << 30))
+        long reserved = _running.Values.Where(r => r != run).Sum(r => r.Work.EstimatedBytes);
+        if (free < (w.EstimatedBytes + reserved) * 1.3 + (1L << 30))
         {
             throw new IOException($"Not enough free space on this PC ({free / 1e9:F1} GB free)");
         }

@@ -23,6 +23,7 @@ import stream.reelforge.tv.data.Item
 import stream.reelforge.tv.player.PlayerScreen
 import stream.reelforge.tv.ui.screens.ConnectScreen
 import stream.reelforge.tv.ui.screens.DetailsScreen
+import stream.reelforge.tv.ui.screens.PersonScreen
 import stream.reelforge.tv.ui.screens.MainScreen
 import stream.reelforge.tv.ui.screens.ProfilesScreen
 import stream.reelforge.tv.ui.theme.RF
@@ -80,7 +81,10 @@ fun AppRoot() {
             )
         }
         composable("details/{id}") { e ->
-            DetailsScreen(e.arguments!!.getString("id")!!, onPlay = { i, fromStart -> play(i, fromStart) }, onOpen = ::open)
+            DetailsScreen(e.arguments!!.getString("id")!!, onPlay = { i, fromStart -> play(i, fromStart) }, onOpen = ::open, onPerson = { p -> nav.navigate("person/$p") })
+        }
+        composable("person/{id}") { e ->
+            PersonScreen(e.arguments!!.getString("id")!!, onOpen = ::open)
         }
         composable(
             "play/{id}?start={start}&auto={auto}",
