@@ -11,7 +11,7 @@ internal static class FfmpegRunner
     /// Runs ffmpeg to completion. <paramref name="onProgress"/> gets (fraction 0..0.999, speed or null).
     /// Throws when ffmpeg fails (with the last lines of its error output) or when cancelled.
     /// </summary>
-    public static async Task RunAsync(string ffmpegPath, IReadOnlyList<string> args, long durationTicks, Action<double, double?> onProgress, CancellationToken ct)
+    public static async Task RunAsync(string ffmpegPath, IReadOnlyList<string> args, long durationTicks, Action<double, double?> onProgress, CancellationToken ct, TimeSpan? stallTimeout = null)
     {
         var psi = new ProcessStartInfo(ffmpegPath)
         {
@@ -35,7 +35,7 @@ internal static class FfmpegRunner
         {
         }
 
-        using var reg = ct.Register(() =>
+        void Kill()
         {
             try
             {
@@ -44,7 +44,23 @@ internal static class FfmpegRunner
             catch (Exception)
             {
             }
-        });
+        }
+
+        using var reg = ct.Register(Kill);
+
+        // Watchdog: ffmpeg that stops moving forward (stuck input, hung driver) is stopped instead of waiting forever.
+        long lastMoveTicks = Environment.TickCount64;
+        bool stalled = false;
+        using var watchdog = stallTimeout is { } limit
+            ? new Timer(_ =>
+            {
+                if (Environment.TickCount64 - Interlocked.Read(ref lastMoveTicks) > limit.TotalMilliseconds && !p.HasExited)
+                {
+                    stalled = true;
+                    Kill();
+                }
+            }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15))
+            : null;
 
         var errTail = new StringBuilder();
         var errTask = Task.Run(async () =>
@@ -71,7 +87,13 @@ internal static class FfmpegRunner
             var (us, speed) = ParseProgressLine(outLine);
             if (us is { } u)
             {
-                fraction = Math.Clamp(u / totalUs, 0, 0.999);
+                double f = Math.Clamp(u / totalUs, 0, 0.999);
+                if (f > fraction)
+                {
+                    Interlocked.Exchange(ref lastMoveTicks, Environment.TickCount64);
+                }
+
+                fraction = f;
                 onProgress(fraction, null);
             }
 
@@ -84,6 +106,11 @@ internal static class FfmpegRunner
         await p.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
         await errTask.ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
+        if (stalled)
+        {
+            throw new InvalidOperationException($"ffmpeg stopped making progress for {stallTimeout!.Value.TotalMinutes:0} minutes at {fraction:P0} and was stopped");
+        }
+
         if (p.ExitCode != 0)
         {
             string err;

@@ -17,3 +17,12 @@ test('helpers', () => {
   assert.equal(looksLocalOnly('http://localhost:8096'), true);
   assert.equal(looksLocalOnly('http://192.168.1.10:8096'), false);
 });
+
+test('internet addresses are told apart from local ones', async () => {
+  const { looksPublic } = await import('./agentScript');
+  assert.equal(looksPublic('https://home.reelforge.stream'), true);
+  assert.equal(looksPublic('http://192.168.1.10:8096'), false);
+  assert.equal(looksPublic('http://media-server:8096'), false);
+  assert.equal(looksPublic('http://nas.local:8096'), false);
+  assert.equal(looksPublic('not a url'), false);
+});

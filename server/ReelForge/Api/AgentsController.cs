@@ -60,6 +60,7 @@ public sealed class AgentApiController : ControllerBase
             r.Encoders = req.Encoders ?? new();
             r.TenBitHevc = req.TenBitHevc ?? new();
             r.Address = Address;
+            r.ServerHost = Request.Host.Value;
             r.CurrentJobIds = (req.Jobs ?? new()).Select(j => j.JobId).ToList();
         });
 
@@ -74,8 +75,7 @@ public sealed class AgentApiController : ControllerBase
             }
 
             active++;
-            // While a finished file uploads, just keep it alive; otherwise record progress.
-            _queue.AgentProgress(a.Id, j.JobId, j.Phase == "uploading" ? 0.999 : j.Progress, j.Phase == "uploading" ? null : j.Speed);
+            _queue.AgentProgress(a.Id, j);
         }
 
         // Top the PC up to its "files at once".
@@ -145,6 +145,82 @@ public sealed class AgentApiController : ControllerBase
 
             _queue.AgentFailed(a.Id, id, "upload interrupted");
             return StatusCode(500, "Upload interrupted.");
+        }
+
+        _queue.AgentResultReady(job);
+        return Accepted();
+    }
+
+    /// <summary>Largest piece the agent sends at once: well under the ~100 MB request limit of proxies such as Cloudflare.</summary>
+    public const int MaxPartBytes = 32 << 20;
+
+    /// <summary>How much of the converted file has arrived so far (lets the agent resume after a dropped connection).</summary>
+    [HttpGet("Jobs/{id}/Result/Part")]
+    public ActionResult<AgentUploadState> ResultState([FromRoute] string id)
+    {
+        if (Agent() is not { } a)
+        {
+            return Unauthorized();
+        }
+
+        if (_queue.AgentJob(a.Id, id) is not { Status: JobStatus.Running } job || _queue.AgentResultPath(job) is not { } path)
+        {
+            return Conflict("This file isn't yours to convert any more (cancelled or given to another PC).");
+        }
+
+        return new AgentUploadState(System.IO.File.Exists(path) ? new FileInfo(path).Length : 0, MaxPartBytes);
+    }
+
+    /// <summary>One piece of the converted file, written at the given offset next to the original.</summary>
+    [HttpPut("Jobs/{id}/Result/Part")]
+    [RequestSizeLimit(MaxPartBytes + 1024)]
+    public async Task<ActionResult<AgentUploadState>> ResultPart([FromRoute] string id, [FromQuery] long offset, CancellationToken ct)
+    {
+        if (Agent() is not { } a)
+        {
+            return Unauthorized();
+        }
+
+        if (_queue.AgentJob(a.Id, id) is not { Status: JobStatus.Running } job || _queue.AgentResultPath(job) is not { } path)
+        {
+            return Conflict("This file isn't yours to convert any more (cancelled or given to another PC).");
+        }
+
+        long have = System.IO.File.Exists(path) ? new FileInfo(path).Length : 0;
+        if (offset < 0 || offset > have)
+        {
+            return StatusCode(416, new AgentUploadState(have, MaxPartBytes)); // a gap: the agent resumes from what's here
+        }
+
+        await using (var fs = new FileStream(path, offset == 0 ? FileMode.Create : FileMode.Open, FileAccess.Write, FileShare.None, 1 << 20, useAsync: true))
+        {
+            fs.SetLength(offset); // a piece sent again after a dropped answer replaces what came before
+            fs.Position = offset;
+            await Request.Body.CopyToAsync(fs, 1 << 20, ct).ConfigureAwait(false);
+            have = fs.Length;
+        }
+
+        return new AgentUploadState(have, MaxPartBytes);
+    }
+
+    /// <summary>Every piece is here: check the size, then verify and swap it in like any conversion.</summary>
+    [HttpPost("Jobs/{id}/Result/Done")]
+    public ActionResult ResultDone([FromRoute] string id, [FromQuery] long size)
+    {
+        if (Agent() is not { } a)
+        {
+            return Unauthorized();
+        }
+
+        if (_queue.AgentJob(a.Id, id) is not { Status: JobStatus.Running } job || _queue.AgentResultPath(job) is not { } path)
+        {
+            return Conflict("This file isn't yours to convert any more (cancelled or given to another PC).");
+        }
+
+        long have = System.IO.File.Exists(path) ? new FileInfo(path).Length : 0;
+        if (have != size)
+        {
+            return StatusCode(416, new AgentUploadState(have, MaxPartBytes));
         }
 
         _queue.AgentResultReady(job);
@@ -233,13 +309,15 @@ public sealed class AgentsController : ControllerBase
                     a.Version,
                     a.Os,
                     a.Address,
+                    a.ServerHost,
+                    ViaInternet = AgentRegistry.LooksLikeInternet(a.ServerHost),
                     a.Gpus,
                     a.Encoders,
                     a.TenBitHevc,
                     a.FilesConverted,
                     a.BytesSaved,
                     a.LastError,
-                    Jobs = mine.Select(job => new { job.Id, job.Title, job.Progress, job.Speed, job.EtaSeconds, job.Encoder, Status = job.Status.ToString() }),
+                    Jobs = mine.Select(job => new { job.Id, job.Title, job.Progress, job.Speed, job.EtaSeconds, job.Encoder, Phase = job.Status == JobStatus.Running ? job.Phase : null, job.BytesPerSecond, Status = job.Status.ToString() }),
                 };
             }),
         });

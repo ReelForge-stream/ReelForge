@@ -196,7 +196,12 @@ export interface Job {
   Message?: string | null;
   FinishedUtc?: string | null;
   AgentName?: string | null;
+  /** On an agent: downloading, converting or uploading. */
+  Phase?: JobPhase | null;
+  BytesPerSecond?: number | null;
 }
+
+export type JobPhase = 'downloading' | 'converting' | 'uploading';
 
 export interface HeldFile {
   Id: string;
@@ -421,13 +426,17 @@ export interface AgentInfo {
   Version?: string;
   Os?: string;
   Address?: string;
+  /** The server address the agent connects to. */
+  ServerHost?: string;
+  /** It reaches the server through a public name (Cloudflare etc.): slow, with upload limits. */
+  ViaInternet?: boolean;
   Gpus: string[];
   Encoders: string[];
   TenBitHevc: string[];
   FilesConverted: number;
   BytesSaved: number;
   LastError?: string;
-  Jobs: { Id: string; Title: string; Progress: number; Speed: number; EtaSeconds?: number; Encoder?: string; Status: string }[];
+  Jobs: { Id: string; Title: string; Progress: number; Speed: number; EtaSeconds?: number; Encoder?: string; Status: string; Phase?: JobPhase | null; BytesPerSecond?: number | null }[];
 }
 
 export interface AgentsResult {

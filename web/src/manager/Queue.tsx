@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { bytes, duration } from '../lib/api';
+import { jobStep, stepClass } from '../lib/jobStep';
 import type { Job } from '../lib/types';
 import { useApi, useAsync, usePoll, useToast } from '../lib/ui';
 
@@ -61,7 +62,7 @@ function JobRow({ job: j, onCancel }: { job: Job; onCancel: () => void }) {
   let meta: string;
   switch (j.Status) {
     case 'Running':
-      meta = `${Math.round(j.Progress * 100)}%${j.Speed ? ` · ${j.Speed.toFixed(1)}× real time` : ''}${j.EtaSeconds ? ` · about ${duration(j.EtaSeconds)} left` : ''}${j.Encoder ? ` · ${/nvenc|amf/.test(j.Encoder) ? 'GPU' : 'CPU'}` : ''}${j.AgentName ? ` · on ${j.AgentName}` : ''}`;
+      meta = jobStep(j, duration);
       break;
     case 'Verifying':
       meta = 'Checking the new file matches the original…';
@@ -88,7 +89,7 @@ function JobRow({ job: j, onCancel }: { job: Job; onCancel: () => void }) {
         </button>
       )}
       {(running || j.Status === 'Done') && (
-        <div className={`bar${j.Status === 'Done' ? ' done' : ''}`} role="progressbar" aria-valuenow={Math.round(j.Progress * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={`${j.Title} progress`}>
+        <div className={`bar${j.Status === 'Done' ? ' done' : ''}${j.Status === 'Running' ? stepClass(j.Phase) : ''}`} role="progressbar" aria-valuenow={Math.round(j.Progress * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={`${j.Title} progress`}>
           <span style={{ width: `${j.Progress * 100}%` }} />
         </div>
       )}

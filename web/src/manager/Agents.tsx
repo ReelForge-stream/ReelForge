@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { bytes } from '../lib/api';
-import { encoderLabel, installScript, looksLocalOnly, uninstallScript } from '../lib/agentScript';
+import { bytes, duration } from '../lib/api';
+import { jobStep, stepClass } from '../lib/jobStep';
+import { encoderLabel, installScript, looksLocalOnly, looksPublic, uninstallScript } from '../lib/agentScript';
 import type { AgentInfo } from '../lib/types';
 import { Confirm, Icon, useApi, useAsync, usePoll, useToast } from '../lib/ui';
 import { timeAgo, Toggle } from '../settings/common';
@@ -126,11 +127,11 @@ function AgentCard({ a, serverVersion, onToggle, onCpu, onMaxJobs, onRemove }: {
           <div className="agent-job-line">
             <span>{j.Title}</span>
             <span className="hint">
-              {j.Status === 'Verifying' ? 'Checking the result…' : `${Math.round(j.Progress * 100)}%${j.Speed ? ` · ${j.Speed.toFixed(1)}× real time` : ''}`}
-              {j.Encoder ? ` · ${encoderLabel(j.Encoder)}` : ''}
+              {j.Status === 'Verifying' ? 'Checking the result…' : jobStep({ ...j, Encoder: null }, duration, false)}
+              {j.Encoder && j.Status !== 'Verifying' ? ` · ${encoderLabel(j.Encoder)}` : ''}
             </span>
           </div>
-          <div className="bar"><span style={{ width: `${Math.max(2, j.Progress * 100)}%` }} /></div>
+          <div className={`bar${stepClass(j.Phase)}`}><span style={{ width: `${Math.max(2, j.Progress * 100)}%` }} /></div>
         </div>
       ))}
 
@@ -158,6 +159,11 @@ function AgentCard({ a, serverVersion, onToggle, onCpu, onMaxJobs, onRemove }: {
           </dd>
         </div>
       </dl>
+      {a.ViaInternet && (
+        <p className="hint agent-error">
+          This PC reaches the server through <strong>{a.ServerHost}</strong>, an internet address, so every file goes out over your internet connection and back. That’s much slower, and services like Cloudflare limit uploads. Run the install script on it again with the server’s local address (e.g. http://192.168.1.10:8096).
+        </p>
+      )}
       {a.LastError && <p className="hint agent-error">Last problem: {a.LastError}</p>}
       <div className="agent-settings">
         <label className="agent-max">
@@ -212,6 +218,7 @@ function AddPc({ pairingKey, version, first, onNewKey }: { pairingKey: string; v
               <strong>Check the address the other PCs use to reach this server.</strong>
               <input className="input" value={server} onChange={(e) => setServer(e.target.value)} aria-label="Server address for agents" spellCheck={false} />
               {looksLocalOnly(server) && <p className="hint warn-text">“localhost” only works on this computer: use its network address instead, e.g. http://192.168.1.10:8096.</p>}
+              {looksPublic(server) && <p className="hint warn-text">This looks like an internet address. Agents on your network should use the server’s local address (e.g. http://192.168.1.10:8096): files then move at network speed instead of going out over your internet connection and back.</p>}
             </li>
             <li>
               <strong>Run this script on each PC, from Apex RMM.</strong>
@@ -228,7 +235,7 @@ function AddPc({ pairingKey, version, first, onNewKey }: { pairingKey: string; v
             </li>
             <li>
               <strong>That’s it.</strong>
-              <span className="hint">Each PC appears above within a minute and starts taking files from the Conversions queue. It reads each file from this server and sends the smaller copy back; this server checks it and swaps it in exactly like its own conversions. A wired network connection makes it much quicker.</span>
+              <span className="hint">Each PC appears above within a minute and starts taking files from the Conversions queue. It copies each file from this server, converts it, and sends the smaller copy back; this server checks it and swaps it in exactly like its own conversions. A wired network connection makes it much quicker.</span>
             </li>
           </ol>
           <div className="key-row">

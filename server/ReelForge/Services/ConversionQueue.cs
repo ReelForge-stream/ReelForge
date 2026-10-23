@@ -79,6 +79,12 @@ public sealed class ConversionJob
 
     public string? AgentName { get; set; }
 
+    /// <summary>Gets or sets what an agent is doing with the file: downloading, converting or uploading.</summary>
+    public string? Phase { get; set; }
+
+    /// <summary>Gets or sets the transfer rate while an agent downloads or uploads the file.</summary>
+    public double? BytesPerSecond { get; set; }
+
     /// <summary>Gets or sets how many times an agent has had to give this file back (lost contact, error).</summary>
     public int Attempts { get; set; }
 
@@ -88,6 +94,12 @@ public sealed class ConversionJob
 
     [JsonIgnore]
     internal DateTime AgentSeenUtc { get; set; }
+
+    /// <summary>Gets or sets when the agent last reported real headway (progress or bytes moved).</summary>
+    internal DateTime MovedUtc { get; set; }
+
+    /// <summary>Gets or sets the last progress mark an agent reported, to tell headway from a stuck job.</summary>
+    internal (string? Phase, double Progress, long? Bytes) LastMark { get; set; }
 
     [JsonIgnore]
     internal PreparedJob? Prepared { get; set; }
@@ -589,6 +601,9 @@ public sealed class ConversionQueue : BackgroundService
                 job.AgentId = agentId;
                 job.AgentName = agentName;
                 job.AgentSeenUtc = DateTime.UtcNow;
+                job.MovedUtc = DateTime.UtcNow;
+                job.Phase = null;
+                job.BytesPerSecond = null;
                 job.Encoder = encoder.VideoEncoder;
                 job.Progress = 0;
                 job.Message = null;
@@ -599,7 +614,7 @@ public sealed class ConversionQueue : BackgroundService
             SaveJobs(force: true);
             _logger.LogInformation("ReelForge: {Agent} is converting {Title} with {Encoder}", agentName, job.Title, encoder.VideoEncoder);
             var args = FfmpegArgs.Build(p.File with { Path = AgentInput }, p.Settings, encoder, p.Estimate.TargetVideoBitrate, AgentOutput);
-            return new AgentWork(job.Id, job.Title, ForNetworkInput(args), p.File.DurationTicks, job.SourceToken!, encoder.VideoEncoder, p.Estimate.EstimatedSizeBytes);
+            return new AgentWork(job.Id, job.Title, args, p.File.DurationTicks, job.SourceToken!, encoder.VideoEncoder, p.Estimate.EstimatedSizeBytes, job.OriginalBytes);
         }
 
         return null;
@@ -607,19 +622,6 @@ public sealed class ConversionQueue : BackgroundService
 
     public const string AgentInput = AgentProtocol.Input;
     public const string AgentOutput = AgentProtocol.Output;
-
-    /// <summary>The agent reads the file over the network: let ffmpeg ride out a dropped connection.</summary>
-    internal static IReadOnlyList<string> ForNetworkInput(IReadOnlyList<string> args)
-    {
-        var list = args.ToList();
-        int i = list.IndexOf(AgentInput);
-        if (i > 0 && list[i - 1] == "-i")
-        {
-            list.InsertRange(i - 1, ["-reconnect", "1", "-reconnect_on_network_error", "1", "-reconnect_delay_max", "30", "-rw_timeout", "60000000"]);
-        }
-
-        return list;
-    }
 
     /// <summary>The job an agent is working on, if it really is that agent's (and still wanted).</summary>
     internal ConversionJob? AgentJob(string agentId, string jobId)
@@ -639,20 +641,38 @@ public sealed class ConversionQueue : BackgroundService
         }
     }
 
-    internal void AgentProgress(string agentId, string jobId, double progress, double? speed)
+    internal void AgentProgress(string agentId, AgentJobStatus s)
     {
-        var job = AgentJob(agentId, jobId);
+        var job = AgentJob(agentId, s.JobId);
         if (job is null || job.Status != JobStatus.Running)
         {
             return;
         }
 
         job.AgentSeenUtc = DateTime.UtcNow;
-        job.Progress = Math.Clamp(progress, 0, 0.999);
-        if (speed is { } sp && sp > 0)
+        var mark = (s.Phase, Math.Round(s.Progress, 3), s.BytesDone);
+        if (mark != job.LastMark)
+        {
+            job.LastMark = mark;
+            job.MovedUtc = DateTime.UtcNow;
+        }
+
+        job.Phase = s.Phase ?? "converting";
+        job.Progress = Math.Clamp(s.Progress, 0, 0.999);
+        job.BytesPerSecond = s.BytesPerSecond;
+        if (job.Phase == "converting" && s.Speed is { } sp && sp > 0)
         {
             job.Speed = sp;
             job.EtaSeconds = (int)((1 - job.Progress) * (job.Prepared?.File.DurationTicks ?? 0) / 1e7 / sp);
+        }
+        else if (s.BytesPerSecond is { } bps && bps > 0 && s.BytesTotal is { } total)
+        {
+            job.Speed = 0;
+            job.EtaSeconds = (int)((total - (s.BytesDone ?? 0)) / bps);
+        }
+        else
+        {
+            job.EtaSeconds = null;
         }
 
         SaveJobs(force: false);
@@ -716,6 +736,8 @@ public sealed class ConversionQueue : BackgroundService
             job.Prepared = null;
             job.SourceToken = null;
             job.AgentId = null;
+            job.Phase = null;
+            job.BytesPerSecond = null;
             job.EtaSeconds = null;
             job.Progress = 0;
             if (job.Attempts >= MaxAgentAttempts)
@@ -736,18 +758,43 @@ public sealed class ConversionQueue : BackgroundService
         SaveJobs(force: true);
     }
 
-    /// <summary>Files whose agent went quiet go back in the queue.</summary>
+    /// <summary>How long an agent's file may sit without any headway before it goes to someone else.</summary>
+    internal static readonly TimeSpan AgentStallTimeout = TimeSpan.FromMinutes(20);
+
+    /// <summary>Older agents don't report upload bytes, so a big upload looks frozen: give them longer.</summary>
+    internal static readonly TimeSpan AgentBlindUploadTimeout = TimeSpan.FromMinutes(45);
+
+    internal static bool IsStalled(ConversionJob j, DateTime now)
+    {
+        if (j.AgentId is null || j.Status != JobStatus.Running || j.MovedUtc == default)
+        {
+            return false;
+        }
+
+        var limit = j.Phase == "uploading" && j.LastMark.Bytes is null ? AgentBlindUploadTimeout : AgentStallTimeout;
+        return now - j.MovedUtc > limit;
+    }
+
+    /// <summary>Files whose agent went quiet, or that stopped moving on the agent, go back in the queue.</summary>
     private void ReclaimLostAgentJobs()
     {
-        List<ConversionJob> lost;
+        List<ConversionJob> lost, stuck;
+        var now = DateTime.UtcNow;
         lock (_gate)
         {
-            lost = _jobs.Where(j => j.AgentId is not null && j.Status == JobStatus.Running && DateTime.UtcNow - j.AgentSeenUtc > AgentTimeout).ToList();
+            lost = _jobs.Where(j => j.AgentId is not null && j.Status == JobStatus.Running && now - j.AgentSeenUtc > AgentTimeout).ToList();
+            stuck = _jobs.Where(j => !lost.Contains(j) && IsStalled(j, now)).ToList();
         }
 
         foreach (var j in lost)
         {
             GiveBack(j, "stopped responding");
+        }
+
+        foreach (var j in stuck)
+        {
+            _logger.LogWarning("ReelForge: {Title} made no headway on {Agent} for {Minutes:0} minutes ({Phase}); giving it to someone else", j.Title, j.AgentName, (now - j.MovedUtc).TotalMinutes, j.Phase ?? "converting");
+            GiveBack(j, $"got stuck {(j.Phase == "uploading" ? "sending the file back" : j.Phase == "downloading" ? "fetching the file" : "converting")}");
         }
     }
 
@@ -772,7 +819,7 @@ public sealed class ConversionQueue : BackgroundService
             }
 
             SaveJobs(force: false);
-        }, ct);
+        }, ct, stallTimeout: TimeSpan.FromMinutes(10));
 
     internal static (double? OutTimeUs, double? Speed) ParseProgressLine(string line) => FfmpegRunner.ParseProgressLine(line);
 

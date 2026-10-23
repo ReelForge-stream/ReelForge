@@ -83,3 +83,15 @@ export function encoderLabel(e: string): string {
 export function looksLocalOnly(server: string): boolean {
   return /^https?:\/\/(localhost|127\.|\[::1\])/i.test(server.trim());
 }
+
+/** An address with a public name (e.g. https://home.example.com): agents would go out over the internet and back. */
+export function looksPublic(server: string): boolean {
+  let host: string;
+  try {
+    host = new URL(server.trim()).hostname.toLowerCase().replace(/\.$/, '');
+  } catch {
+    return false;
+  }
+  if (!host.includes('.') || host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return false;
+  return !/\.(local|lan|home\.arpa|internal|localdomain)$/.test(host);
+}

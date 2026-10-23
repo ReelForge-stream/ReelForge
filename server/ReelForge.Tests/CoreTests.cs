@@ -797,18 +797,49 @@ public class AgentTests
     }
 
     [Fact]
-    public void Agent_arguments_read_the_file_over_the_network_and_keep_every_track()
+    public void Agent_arguments_use_placeholders_and_keep_every_track()
     {
         var f = Make.Movie("/m/a.mkv", codec: "h264") with { Path = AgentProtocol.Input };
-        var args = ConversionQueue.ForNetworkInput(FfmpegArgs.Build(f, new ConversionSettings(), new EncoderChoice("hevc_amf", false), 4_000_000, AgentProtocol.Output));
+        var args = FfmpegArgs.Build(f, new ConversionSettings(), new EncoderChoice("hevc_amf", false), 4_000_000, AgentProtocol.Output);
         string a = string.Join(' ', args);
-        Assert.Contains("-reconnect 1 -reconnect_on_network_error 1", a);
-        Assert.True(a.IndexOf("-reconnect", StringComparison.Ordinal) < a.IndexOf("-i {input}", StringComparison.Ordinal));
+        Assert.Contains("-i {input}", a);
+        Assert.DoesNotContain("-reconnect", a); // the agent copies the file locally first; a network read can't hang ffmpeg
         Assert.Contains("-c:v hevc_amf", a);
         Assert.Contains("-rc vbr_peak", a);
         Assert.Contains("-c:a copy", a);
         Assert.DoesNotContain("cuda", a);
         Assert.EndsWith("{output}", a);
+    }
+}
+
+public class AgentStallTests
+{
+    private static ConversionJob Running(string? phase, (string?, double, long?) mark, DateTime moved) =>
+        new() { Id = "j", Title = "T", Path = "/m/t.mkv", Status = JobStatus.Running, AgentId = "a", Phase = phase, LastMark = mark, MovedUtc = moved };
+
+    [Fact]
+    public void A_job_with_no_headway_for_20_minutes_is_stuck()
+    {
+        var now = DateTime.UtcNow;
+        Assert.False(ConversionQueue.IsStalled(Running("converting", ("converting", 0.5, null), now.AddMinutes(-19)), now));
+        Assert.True(ConversionQueue.IsStalled(Running("converting", ("converting", 0.999, null), now.AddMinutes(-21)), now));
+        Assert.True(ConversionQueue.IsStalled(Running("uploading", ("uploading", 0.3, 1000), now.AddMinutes(-21)), now));
+    }
+
+    [Fact]
+    public void Older_agents_uploading_without_byte_counts_get_longer()
+    {
+        var now = DateTime.UtcNow;
+        Assert.False(ConversionQueue.IsStalled(Running("uploading", ("uploading", 0.999, null), now.AddMinutes(-30)), now));
+        Assert.True(ConversionQueue.IsStalled(Running("uploading", ("uploading", 0.999, null), now.AddMinutes(-46)), now));
+    }
+
+    [Fact]
+    public void Jobs_on_this_server_are_never_judged_this_way()
+    {
+        var j = Running(null, default, DateTime.UtcNow.AddHours(-3));
+        j.AgentId = null;
+        Assert.False(ConversionQueue.IsStalled(j, DateTime.UtcNow));
     }
 }
 

@@ -30,6 +30,9 @@ public sealed class AgentRecord
 
     public string? Address { get; set; }
 
+    /// <summary>Gets or sets the server address the agent uses (host[:port]), to spot agents going out over the internet.</summary>
+    public string? ServerHost { get; set; }
+
     public List<string> Gpus { get; set; } = new();
 
     /// <summary>Gets or sets the encoders that passed a test encode on the agent (hevc_nvenc, hevc_amf, ...).</summary>
@@ -83,6 +86,39 @@ public sealed class AgentRegistry
         {
             return _agents.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
         }
+    }
+
+    /// <summary>
+    /// True when the agent reaches this server by a public name (e.g. through Cloudflare) rather than a
+    /// local address: every byte then goes out to the internet and back, slowly and with upload limits.
+    /// </summary>
+    public static bool LooksLikeInternet(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        string h = host.Trim();
+        if (h.StartsWith('['))
+        {
+            return false; // IPv6 literal
+        }
+
+        int colon = h.LastIndexOf(':');
+        if (colon > 0)
+        {
+            h = h[..colon];
+        }
+
+        h = h.TrimEnd('.').ToLowerInvariant();
+        if (System.Net.IPAddress.TryParse(h, out _) || !h.Contains('.'))
+        {
+            return false; // an IP address or a plain PC name
+        }
+
+        return !(h.EndsWith(".local", StringComparison.Ordinal) || h.EndsWith(".lan", StringComparison.Ordinal) || h.EndsWith(".home.arpa", StringComparison.Ordinal)
+            || h.EndsWith(".internal", StringComparison.Ordinal) || h.EndsWith(".localdomain", StringComparison.Ordinal));
     }
 
     public static bool IsOnline(AgentRecord a) => DateTime.UtcNow - a.LastSeenUtc < OnlineWindow;

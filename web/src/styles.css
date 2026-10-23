@@ -329,6 +329,7 @@ p { margin: 0; }
 .bar { height: 8px; border-radius: 4px; background: var(--deep); overflow: hidden; }
 .bar span { display: block; height: 100%; background: var(--ember); transition: width 900ms linear; }
 .bar.done span { background: var(--coolant); }
+.bar.transfer span { background: repeating-linear-gradient(-45deg, var(--ember) 0 8px, color-mix(in srgb, var(--ember) 70%, transparent) 8px 16px); }
 
 .job { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; padding: 18px 0; border-bottom: 1px solid var(--line); align-items: center; }
 .job .meta { color: var(--muted); font-size: 0.88rem; }
