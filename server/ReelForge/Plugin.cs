@@ -58,6 +58,12 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets the hour (0-23) after which no new conversion starts, or -1 for any time.</summary>
     public int WindowEndHour { get; set; } = -1;
 
+    /// <summary>Gets or sets a value indicating whether this server converts files itself, as well as any agents.</summary>
+    public bool ConvertOnServer { get; set; } = true;
+
+    /// <summary>Gets or sets the key new agents (other PCs) use to pair with this server.</summary>
+    public string AgentPairingKey { get; set; } = string.Empty;
+
     /// <summary>Gets or sets how often (minutes) libraries are checked for new or changed files. 0 = Jellyfin's default (12 hours).</summary>
     public int LibraryScanMinutes { get; set; } = 5;
 
@@ -82,6 +88,7 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<HoldingArea>();
         serviceCollection.AddSingleton<EncoderProbe>();
         serviceCollection.AddSingleton<SavingsLedger>();
+        serviceCollection.AddSingleton<AgentRegistry>();
         serviceCollection.AddSingleton<ConversionQueue>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<ConversionQueue>());
         serviceCollection.AddSingleton<NetworkShares>();

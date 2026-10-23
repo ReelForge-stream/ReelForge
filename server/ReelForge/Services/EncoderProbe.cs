@@ -209,15 +209,23 @@ public sealed class EncoderProbe
     }
 
     /// <summary>Picks the encoder for one file, dropping to CPU for 10-bit sources if the card can't do 10-bit HEVC.</summary>
-    public static EncoderChoice? ChooseFor(MediaFile f, ConversionSettings s, EncoderReport report)
+    public static EncoderChoice? ChooseFor(MediaFile f, ConversionSettings s, EncoderReport report) =>
+        ChooseFor(f, s, report.Working, report.HevcNvenc10Bit ? ["hevc_nvenc"] : [], allowCpu: true);
+
+    /// <summary>
+    /// Picks the encoder from a list of working ones (this server's or an agent's). For 10-bit sources a
+    /// GPU HEVC encoder is only used if it passed a 10-bit test (<paramref name="tenBitHevc"/>).
+    /// </summary>
+    public static EncoderChoice? ChooseFor(MediaFile f, ConversionSettings s, IEnumerable<string> working, IEnumerable<string> tenBitHevc, bool allowCpu)
     {
-        var working = new HashSet<string>(report.Working, StringComparer.Ordinal);
+        var set = new HashSet<string>(working, StringComparer.Ordinal);
         bool tenBit = f.BitDepth >= 10 || f.Range is DynamicRange.Hdr10 or DynamicRange.Hlg;
-        if (tenBit && s.Codec == TargetCodec.Hevc && !report.HevcNvenc10Bit)
+        if (tenBit && s.Codec == TargetCodec.Hevc)
         {
-            working.Remove("hevc_nvenc");
+            var ok = new HashSet<string>(tenBitHevc, StringComparer.Ordinal);
+            set.RemoveWhere(e => e is "hevc_nvenc" or "hevc_amf" && !ok.Contains(e));
         }
 
-        return FfmpegArgs.Choose(s.Codec, working);
+        return FfmpegArgs.Choose(s.Codec, set, allowCpu);
     }
 }

@@ -6,7 +6,8 @@ name: Release
 # Either way you get:
 #   1. ReelForge_0.2.0.0.zip  - the module; servers auto-update from the feed below
 #   2. ReelForge-Setup-0.2.0.exe - the all-in-one Windows installer
-#   3. ReelForge-AndroidTV-0.2.0.apk - the Google TV / Android TV app (sideload; it updates itself)
+#   3. ReelForge-Agent.exe - the conversion agent for other PCs (installed by the script in Media Manager → Agents)
+#   3b. ReelForge-AndroidTV-0.2.0.apk - the Google TV / Android TV app (sideload; it updates itself)
 #   4. the update feed (branch "update-feed", manifest.json)
 on:
   push:
@@ -71,12 +72,19 @@ jobs:
           JSON
           (cd out/pkg && zip -q ../ReelForge_${V}.0.zip ReelForge.dll meta.json)
           md5sum out/ReelForge_${V}.0.zip | cut -d' ' -f1 > out/checksum.txt
+      - name: Build agent (Windows)
+        run: |
+          V=${{ steps.v.outputs.version }}
+          dotnet publish server/ReelForge.Agent -c Release -r win-x64 -p:Version=$V -o out/agent
+          cp out/agent/ReelForge.Agent.exe out/ReelForge-Agent.exe
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
           name: ReelForge ${{ steps.v.outputs.version }}
-          files: out/ReelForge_${{ steps.v.outputs.version }}.0.zip
+          files: |
+            out/ReelForge_${{ steps.v.outputs.version }}.0.zip
+            out/ReelForge-Agent.exe
           generate_release_notes: true
       - uses: actions/upload-artifact@v4
         with:

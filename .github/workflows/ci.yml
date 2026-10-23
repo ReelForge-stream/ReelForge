@@ -29,6 +29,9 @@ jobs:
       - name: Build module
         working-directory: server
         run: dotnet build ReelForge -c Release
+      - name: Build agent (Windows)
+        working-directory: server
+        run: dotnet publish ReelForge.Agent -c Release -r win-x64 -o ../out/agent
 
   android-tv:
     runs-on: ubuntu-latest

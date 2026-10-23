@@ -192,6 +192,7 @@ export interface Job {
   Encoder?: string | null;
   Message?: string | null;
   FinishedUtc?: string | null;
+  AgentName?: string | null;
 }
 
 export interface HeldFile {
@@ -403,4 +404,31 @@ export interface SavingsResult {
   Since?: string;
   StillHeldBytes: number;
   Rows: { FinishedUtc: string; ItemId: string; Title: string; Path: string; OriginalBytes: number; NewBytes: number; Encoder?: string; SavedBytes: number; RunningTotalBytes: number }[];
+}
+
+export interface AgentInfo {
+  Id: string;
+  Name: string;
+  Enabled: boolean;
+  AllowCpu: boolean;
+  Online: boolean;
+  LastSeenUtc: string;
+  PairedUtc: string;
+  Version?: string;
+  Os?: string;
+  Address?: string;
+  Gpus: string[];
+  Encoders: string[];
+  TenBitHevc: string[];
+  FilesConverted: number;
+  BytesSaved: number;
+  LastError?: string;
+  Job?: { Id: string; Title: string; Progress: number; Speed: number; EtaSeconds?: number; Encoder?: string; Status: string } | null;
+}
+
+export interface AgentsResult {
+  PairingKey: string;
+  ServerVersion: string;
+  ConvertOnServer: boolean;
+  Agents: AgentInfo[];
 }

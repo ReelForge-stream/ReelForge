@@ -1,6 +1,6 @@
 import type {
   ActiveSession, ActivityEntry, AdminUser, DupGroup, HeldFile, Item, Job, MediaSource, Overview, ScheduledTask, Session, Settings,
-  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult, SavingsResult,
+  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult, SavingsResult, AgentsResult,
 } from './types';
 import { demo } from './demo';
 import { describeDevice } from './device';
@@ -496,6 +496,11 @@ export class Api {
   mm = {
     overview: () => this.get<Overview>('/ReelForge/Overview'),
     savings: () => this.get<SavingsResult>('/ReelForge/Savings'),
+    agents: () => this.get<AgentsResult>('/ReelForge/Agents'),
+    updateAgent: (id: string, change: { Enabled?: boolean; AllowCpu?: boolean; Name?: string }) => this.post(`/ReelForge/Agents/${id}`, change),
+    removeAgent: (id: string) => this.del(`/ReelForge/Agents/${id}`),
+    newAgentKey: () => this.post<{ PairingKey: string }>('/ReelForge/Agents/NewKey'),
+    convertOnServer: (on: boolean) => this.post(`/ReelForge/Agents/ConvertOnServer?on=${on}`),
     libraryScan: () => this.get<{ Minutes: number; Running: boolean; LastEndUtc?: string }>('/ReelForge/LibraryScan'),
     setLibraryScan: (Minutes: number) => this.post('/ReelForge/LibraryScan', { Minutes }),
     duplicates: (libraryId?: string) => this.get<DupGroup[]>(`/ReelForge/Duplicates${libraryId ? `?libraryId=${libraryId}` : ''}`),

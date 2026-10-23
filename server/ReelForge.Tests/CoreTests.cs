@@ -738,3 +738,76 @@ public class SavingsLedgerTests
         }
     }
 }
+
+public class AgentTests
+{
+    [Fact]
+    public void Pairing_key_and_agent_secret_checks()
+    {
+        string key = AgentRegistry.NewKey();
+        Assert.Matches("^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$", key);
+        Assert.True(AgentRegistry.KeyMatches(key, key.ToLowerInvariant().Replace("-", string.Empty, StringComparison.Ordinal))); // typed loosely
+        Assert.False(AgentRegistry.KeyMatches(key, "AAAA-BBBB-CCCC"));
+        Assert.False(AgentRegistry.KeyMatches(string.Empty, string.Empty));
+
+        string path = Path.Combine(Path.GetTempPath(), $"rf-agents-{Guid.NewGuid():N}.json");
+        try
+        {
+            var reg = new AgentRegistry(NullLogger<AgentRegistry>.Instance, path);
+            var (a, secret) = reg.Register("GAMING-PC", "Windows", "0.9.0", "10.0.0.5");
+            Assert.Same(a, reg.Authenticate($"{a.Id}.{secret}"));
+            Assert.Null(reg.Authenticate($"{a.Id}.wrong"));
+            Assert.Null(reg.Authenticate("nonsense"));
+            Assert.DoesNotContain(secret, File.ReadAllText(path)); // only the hash is stored
+
+            // Reinstalling on the same PC replaces it (same id, new secret, keeps its totals).
+            reg.Update(a.Id, x => x.FilesConverted = 7);
+            var (b, secret2) = new AgentRegistry(NullLogger<AgentRegistry>.Instance, path).Register("gaming-pc", "Windows", "0.9.1", "10.0.0.5");
+            Assert.Equal(a.Id, b.Id);
+            Assert.Equal(7, b.FilesConverted);
+            var reloaded = new AgentRegistry(NullLogger<AgentRegistry>.Instance, path);
+            Assert.Single(reloaded.List());
+            Assert.Null(reloaded.Authenticate($"{a.Id}.{secret}"));
+            Assert.NotNull(reloaded.Authenticate($"{b.Id}.{secret2}"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Agents_get_their_best_graphics_encoder_and_never_the_processor_unless_allowed()
+    {
+        var sdr = Make.Movie("/m/a.mkv", codec: "h264");
+        var hdr10 = Make.Movie("/m/b.mkv", codec: "hevc", range: DynamicRange.Hdr10, bitDepth: 10);
+        var hevc = new ConversionSettings();
+
+        Assert.Equal("hevc_nvenc", EncoderProbe.ChooseFor(sdr, hevc, ["hevc_amf", "hevc_nvenc"], [], allowCpu: false)!.VideoEncoder);
+        var amd = EncoderProbe.ChooseFor(sdr, hevc, ["hevc_amf"], [], allowCpu: false)!;
+        Assert.Equal("hevc_amf", amd.VideoEncoder);
+        Assert.False(amd.UseCudaDecode);
+        Assert.Null(EncoderProbe.ChooseFor(sdr, hevc, ["libx265"], [], allowCpu: false));
+        Assert.Equal("libx265", EncoderProbe.ChooseFor(sdr, hevc, ["libx265"], [], allowCpu: true)!.VideoEncoder);
+
+        // 10-bit HDR only goes to a card that passed the 10-bit test.
+        Assert.Null(EncoderProbe.ChooseFor(hdr10, hevc, ["hevc_amf"], [], allowCpu: false));
+        Assert.Equal("hevc_amf", EncoderProbe.ChooseFor(hdr10, hevc, ["hevc_amf"], ["hevc_amf"], allowCpu: false)!.VideoEncoder);
+        Assert.Equal("av1_amf", EncoderProbe.ChooseFor(sdr, new ConversionSettings { Codec = TargetCodec.Av1 }, ["av1_amf"], [], allowCpu: false)!.VideoEncoder);
+    }
+
+    [Fact]
+    public void Agent_arguments_read_the_file_over_the_network_and_keep_every_track()
+    {
+        var f = Make.Movie("/m/a.mkv", codec: "h264") with { Path = AgentProtocol.Input };
+        var args = ConversionQueue.ForNetworkInput(FfmpegArgs.Build(f, new ConversionSettings(), new EncoderChoice("hevc_amf", false), 4_000_000, AgentProtocol.Output));
+        string a = string.Join(' ', args);
+        Assert.Contains("-reconnect 1 -reconnect_on_network_error 1", a);
+        Assert.True(a.IndexOf("-reconnect", StringComparison.Ordinal) < a.IndexOf("-i {input}", StringComparison.Ordinal));
+        Assert.Contains("-c:v hevc_amf", a);
+        Assert.Contains("-rc vbr_peak", a);
+        Assert.Contains("-c:a copy", a);
+        Assert.DoesNotContain("cuda", a);
+        Assert.EndsWith("{output}", a);
+    }
+}

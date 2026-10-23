@@ -109,6 +109,21 @@ public static class FfmpegArgs
                     "-spatial-aq", "1", "-rc-lookahead", "32",
                     "-pix_fmt", tenBit ? "p010le" : "yuv420p",
                 ];
+            case "hevc_amf":
+                // AMD Radeon (VCN). Peak-constrained VBR at the estimated bitrate; AMF has no CQ mode as good as NVENC's.
+                return
+                [
+                    "-c:v", "hevc_amf", "-usage", "transcoding", "-quality", "quality", "-rc", "vbr_peak",
+                    "-b:v", Kbps(target), "-maxrate", maxrate, "-bufsize", bufsize, "-vbaq", "true",
+                    "-profile:v", tenBit ? "main10" : "main", "-pix_fmt", tenBit ? "p010le" : "yuv420p",
+                ];
+            case "av1_amf":
+                return
+                [
+                    "-c:v", "av1_amf", "-usage", "transcoding", "-quality", "quality", "-rc", "vbr_peak",
+                    "-b:v", Kbps(target), "-maxrate", maxrate, "-bufsize", bufsize,
+                    "-pix_fmt", tenBit ? "p010le" : "yuv420p",
+                ];
             case "libsvtav1":
                 return
                 [
@@ -133,23 +148,22 @@ public static class FfmpegArgs
     private static string Kbps(long bps) => (bps / 1000).ToString(CultureInfo.InvariantCulture) + "k";
 
     /// <summary>Picks the encoder for the requested codec from what the machine passed a live test for.</summary>
-    public static EncoderChoice? Choose(TargetCodec codec, ISet<string> workingEncoders)
+    public static EncoderChoice? Choose(TargetCodec codec, ISet<string> workingEncoders, bool allowCpu = true)
     {
-        if (codec == TargetCodec.Av1)
+        // Graphics card first (NVIDIA, then AMD), the processor only as a last resort.
+        string[] order = codec == TargetCodec.Av1
+            ? ["av1_nvenc", "av1_amf", "libsvtav1"]
+            : ["hevc_nvenc", "hevc_amf", "libx265"];
+        foreach (var enc in order)
         {
-            if (workingEncoders.Contains("av1_nvenc"))
+            bool cpu = enc.StartsWith("lib", StringComparison.Ordinal);
+            if (workingEncoders.Contains(enc) && (allowCpu || !cpu))
             {
-                return new EncoderChoice("av1_nvenc", true);
+                // NVIDIA decodes on the card too; AMD and the processor decode in software.
+                return new EncoderChoice(enc, enc.EndsWith("_nvenc", StringComparison.Ordinal));
             }
-
-            return workingEncoders.Contains("libsvtav1") ? new EncoderChoice("libsvtav1", false) : null;
         }
 
-        if (workingEncoders.Contains("hevc_nvenc"))
-        {
-            return new EncoderChoice("hevc_nvenc", true);
-        }
-
-        return workingEncoders.Contains("libx265") ? new EncoderChoice("libx265", false) : null;
+        return null;
     }
 }

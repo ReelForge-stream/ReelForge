@@ -61,7 +61,7 @@ function JobRow({ job: j, onCancel }: { job: Job; onCancel: () => void }) {
   let meta: string;
   switch (j.Status) {
     case 'Running':
-      meta = `${Math.round(j.Progress * 100)}%${j.Speed ? ` · ${j.Speed.toFixed(1)}× real time` : ''}${j.EtaSeconds ? ` · about ${duration(j.EtaSeconds)} left` : ''}${j.Encoder ? ` · ${j.Encoder.includes('nvenc') ? 'GPU' : 'CPU'}` : ''}`;
+      meta = `${Math.round(j.Progress * 100)}%${j.Speed ? ` · ${j.Speed.toFixed(1)}× real time` : ''}${j.EtaSeconds ? ` · about ${duration(j.EtaSeconds)} left` : ''}${j.Encoder ? ` · ${/nvenc|amf/.test(j.Encoder) ? 'GPU' : 'CPU'}` : ''}${j.AgentName ? ` · on ${j.AgentName}` : ''}`;
       break;
     case 'Verifying':
       meta = 'Checking the new file matches the original…';

@@ -6,6 +6,7 @@ const TABS = [
   { to: '/manager/space', label: 'Space Saver' },
   { to: '/manager/queue', label: 'Conversions' },
   { to: '/manager/saved', label: 'Space saved' },
+  { to: '/manager/agents', label: 'Agents' },
   { to: '/manager/holding', label: 'Removed files' },
   { to: '/manager/settings', label: 'Settings' },
 ];
