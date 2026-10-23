@@ -155,7 +155,7 @@ export class Api {
     return this.get<Item[]>(`/Items/Latest?userId=${this.userId}&parentId=${parentId}&limit=18&fields=${Api.fields}`);
   }
 
-  items(opts: { parentId?: string; types?: string; sortBy?: string; sortOrder?: string; search?: string; start?: number; limit?: number; genre?: string; favorites?: boolean; withImage?: string }) {
+  items(opts: { parentId?: string; types?: string; sortBy?: string; sortOrder?: string; search?: string; start?: number; limit?: number; genre?: string; favorites?: boolean; withImage?: string; count?: boolean }) {
     const q = new URLSearchParams({
       userId: this.userId,
       recursive: 'true',
@@ -164,7 +164,8 @@ export class Api {
       sortOrder: opts.sortOrder ?? 'Ascending',
       startIndex: String(opts.start ?? 0),
       limit: String(opts.limit ?? 120),
-      enableTotalRecordCount: 'true',
+      // Counting the whole library is slow on big ones; only paging lists need it.
+      enableTotalRecordCount: opts.count === false ? 'false' : 'true',
     });
     if (opts.parentId) q.set('parentId', opts.parentId);
     if (opts.types) q.set('includeItemTypes', opts.types);
@@ -495,6 +496,8 @@ export class Api {
   mm = {
     overview: () => this.get<Overview>('/ReelForge/Overview'),
     savings: () => this.get<SavingsResult>('/ReelForge/Savings'),
+    libraryScan: () => this.get<{ Minutes: number; Running: boolean; LastEndUtc?: string }>('/ReelForge/LibraryScan'),
+    setLibraryScan: (Minutes: number) => this.post('/ReelForge/LibraryScan', { Minutes }),
     duplicates: (libraryId?: string) => this.get<DupGroup[]>(`/ReelForge/Duplicates${libraryId ? `?libraryId=${libraryId}` : ''}`),
     removeDuplicates: (files: { ItemId: string; MediaSourceId: string }[]) =>
       this.post<{ Removed: number; Errors: string[]; HoldingDays: number }>('/ReelForge/Duplicates/Remove', { Files: files }),

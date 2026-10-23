@@ -19,6 +19,16 @@ export default function Libraries() {
   const libs = useAsync(() => api.admin.libraries(), []);
   const tasks = useAsync(() => api.admin.tasks(), []);
   const [adding, setAdding] = useState(false);
+  const schedule = useAsync(() => api.mm.libraryScan().catch(() => null), []);
+  const setEvery = async (m: number) => {
+    try {
+      await api.mm.setLibraryScan(m);
+      schedule.setData({ ...(schedule.data ?? { Running: false }), Minutes: m });
+      toast(m ? `Libraries will be checked every ${m < 60 ? `${m} minutes` : m === 60 ? 'hour' : `${m / 60} hours`}` : 'Automatic checks turned down to twice a day');
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
   const scan = tasks.data?.find((t) => t.Key === 'RefreshLibrary');
   const scanning = scan?.State === 'Running' || (libs.data ?? []).some((l) => l.RefreshStatus === 'Active');
   usePoll(
@@ -46,10 +56,10 @@ export default function Libraries() {
     <div className="set-stack">
       <Section
         title="Libraries"
-        desc="Each library is a set of folders ReelForge watches. New files show up by themselves within a minute or two; scan if something’s missing."
+        desc="Each library is a set of folders ReelForge watches. It checks them for new, changed and removed files on a schedule; scan now if you don’t want to wait."
         aside={
           <div className="row-actions">
-            <button className="btn" onClick={scanAll} disabled={scanning}>{scanning ? 'Scanning…' : 'Scan all libraries'}</button>
+            <button className="btn" onClick={scanAll} disabled={scanning}>{scanning ? 'Scanning…' : 'Scan now'}</button>
             <button className="btn primary" onClick={() => setAdding(true)}>Add library</button>
           </div>
         }
@@ -60,7 +70,16 @@ export default function Libraries() {
             <div className="bar"><span style={{ width: `${scan?.CurrentProgressPercentage ?? 3}%` }} /></div>
           </div>
         )}
-        {!scanning && scan?.LastExecutionResult && <p className="hint">Last full scan {timeAgo(scan.LastExecutionResult.EndTimeUtc)}.</p>}
+        <div className="scan-schedule">
+          <label htmlFor="scan-every">Check for changes</label>
+          <select id="scan-every" className="select" value={schedule.data?.Minutes ?? 5} disabled={!schedule.data} onChange={(e) => setEvery(Number(e.target.value))}>
+            {[5, 10, 15, 30, 60, 360].map((m) => (
+              <option key={m} value={m}>Every {m < 60 ? `${m} minutes` : m === 60 ? 'hour' : `${m / 60} hours`}{m === 5 ? ' (recommended)' : ''}</option>
+            ))}
+            <option value={0}>Twice a day (Jellyfin default)</option>
+          </select>
+          {!scanning && scan?.LastExecutionResult && <span className="hint">Last checked {timeAgo(scan.LastExecutionResult.EndTimeUtc)}.</span>}
+        </div>
         {adding && <NewLibrary onDone={() => { setAdding(false); libs.reload(); }} onCancel={() => setAdding(false)} />}
         {!libs.data ? <p className="muted">Loading…</p> : libs.data.length === 0 && !adding ? <p className="muted">No libraries yet. Add one to get started.</p> : null}
         <div className="lib-cards">

@@ -58,6 +58,9 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets the hour (0-23) after which no new conversion starts, or -1 for any time.</summary>
     public int WindowEndHour { get; set; } = -1;
 
+    /// <summary>Gets or sets how often (minutes) libraries are checked for new or changed files. 0 = Jellyfin's default (12 hours).</summary>
+    public int LibraryScanMinutes { get; set; } = 5;
+
     /// <summary>Gets or sets how many files convert at once. Quadro cards have no NVENC session limit.</summary>
     public int MaxConcurrentJobs { get; set; } = 1;
 
@@ -84,6 +87,8 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<NetworkShares>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<NetworkShares>());
         serviceCollection.AddHostedService<UpdateFeed>();
+        serviceCollection.AddSingleton<LibraryScanSchedule>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<LibraryScanSchedule>());
         serviceCollection.AddSingleton<DownloadService>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<DownloadService>());
         serviceCollection.AddSingleton<WatchHistory>();

@@ -7,7 +7,7 @@ import { Section, timeAgo } from './common';
 const TICKS = 10_000_000;
 const TASK_NAMES: Record<string, string> = {
   PluginUpdates: 'Check for ReelForge updates',
-  RefreshLibrary: 'Scan all libraries',
+  RefreshLibrary: 'Check libraries for changes',
   DeleteTranscodeFiles: 'Clean up streaming leftovers',
   RefreshTrickplayImages: 'Make seek-bar preview pictures',
   RefreshChapterImages: 'Make chapter pictures',

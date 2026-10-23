@@ -1,44 +1,113 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Item } from '../lib/types';
 import { useLiveItem, useMenuTrigger } from '../lib/itemMenu';
-import { Art, Icon, RankTile, Tile, epCode, useApi, useAsync, useDetailsLink, usePoll } from '../lib/ui';
+import { Art, Icon, RankTile, Tile, epCode, useApi, useDetailsLink, usePoll } from '../lib/ui';
 
 const PREFERRED_GENRES = ['Action', 'Comedy', 'Drama', 'Animation', 'Thriller', 'Science Fiction', 'Family', 'Documentary', 'Crime', 'Horror', 'Adventure', 'Romance'];
 
+interface HomeData {
+  resume: Item[];
+  nextUp: Item[];
+  latest: { lib: Item; items: Item[] }[];
+  top: Item[];
+  spotlight: Item[];
+  genres: { name: string; items: Item[] }[];
+}
+
+const cacheKey = (userId: string) => `rf-home-${userId}`;
+
+function readCache(userId: string): Partial<HomeData> | null {
+  try {
+    return JSON.parse(localStorage.getItem(cacheKey(userId)) ?? 'null');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Everything Home shows, loaded all at once and shown row by row as each arrives. The last Home
+ * is remembered, so it appears instantly next time while fresh rows load in behind it.
+ */
+function useHomeData() {
+  const api = useApi();
+  const [d, setD] = useState<Partial<HomeData>>(() => readCache(api.userId) ?? {});
+  const [error, setError] = useState<string | null>(null);
+  const [round, setRound] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    const fresh: Partial<HomeData> = {};
+    const put = <K extends keyof HomeData>(k: K, v: HomeData[K]) => {
+      if (!live) return;
+      fresh[k] = v;
+      setD((x) => ({ ...x, [k]: v }));
+    };
+    const light = { count: false } as const;
+    const none: Item[] = [];
+    const jobs: Promise<unknown>[] = [
+      api.resume().then((v) => put('resume', v)),
+      api.nextUp().catch(() => none).then((v) => put('nextUp', v)),
+      api.items({ ...light, types: 'Movie,Series', sortBy: 'Random', limit: 24, withImage: 'Backdrop' }).then((r) => put('spotlight', r.Items)).catch(() => put('spotlight', none)),
+      // Genre rows: ask for a handful of common genres directly instead of listing every genre first.
+      Promise.all(
+        PREFERRED_GENRES.slice(0, 7).map((g) =>
+          api.items({ ...light, genre: g, types: 'Movie,Series', sortBy: 'Random', limit: 18 }).then((r) => ({ name: g, items: r.Items })).catch(() => ({ name: g, items: none })),
+        ),
+      ).then((gs) => put('genres', gs.filter((g) => g.items.length >= 4).slice(0, 4))),
+      api.views().then((views) => {
+        const libs = views.filter((v) => v.CollectionType === 'movies' || v.CollectionType === 'tvshows');
+        const movieLib = libs.find((l) => l.CollectionType === 'movies');
+        return Promise.all([
+          Promise.all(libs.map((l) => api.latest(l.Id).then((items) => ({ lib: l, items })).catch(() => ({ lib: l, items: none })))).then((v) => put('latest', v)),
+          movieLib
+            ? api.items({ ...light, parentId: movieLib.Id, types: 'Movie', sortBy: 'CommunityRating,SortName', sortOrder: 'Descending', limit: 10 }).then((r) => put('top', r.Items.filter((i) => i.CommunityRating))).catch(() => put('top', none))
+            : put('top', none),
+        ]);
+      }),
+    ];
+    Promise.all(jobs)
+      .then(() => {
+        if (!live) return;
+        setError(null);
+        try {
+          localStorage.setItem(cacheKey(api.userId), JSON.stringify(fresh));
+        } catch {
+          /* full or private mode: no cache, still works */
+        }
+      })
+      .catch((e: Error) => live && !Object.keys(fresh).length && setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [api, round]);
+
+  return { d, error, reload: () => setRound((n) => n + 1) };
+}
+
 export default function Home() {
   const api = useApi();
-  const data = useAsync(async () => {
-    const [views, resume, nextUp] = await Promise.all([api.views(), api.resume(), api.nextUp().catch(() => [] as Item[])]);
-    const libs = views.filter((v) => v.CollectionType === 'movies' || v.CollectionType === 'tvshows');
-    const latest = await Promise.all(libs.map((l) => api.latest(l.Id).then((items) => ({ lib: l, items })).catch(() => ({ lib: l, items: [] as Item[] }))));
-    const movieLib = libs.find((l) => l.CollectionType === 'movies');
-    const top = movieLib
-      ? await api.items({ parentId: movieLib.Id, types: 'Movie', sortBy: 'CommunityRating,SortName', sortOrder: 'Descending', limit: 10 }).then((r) => r.Items.filter((i) => i.CommunityRating)).catch(() => [] as Item[])
-      : [];
-    // Featured: a mix of new arrivals and the rest of the library, all with big artwork.
-    const spotlight = await api.items({ types: 'Movie,Series', sortBy: 'Random', limit: 24, withImage: 'Backdrop' }).then((r) => r.Items).catch(() => [] as Item[]);
-    const allGenres = await api.genres().catch(() => []);
-    const names = PREFERRED_GENRES.filter((g) => allGenres.some((x) => x.Name === g)).slice(0, 4);
-    const genres = await Promise.all(
-      names.map((g) => api.items({ genre: g, types: 'Movie,Series', sortBy: 'Random', limit: 18 }).then((r) => ({ name: g, items: r.Items })).catch(() => ({ name: g, items: [] as Item[] }))),
-    );
-    return { resume, nextUp, latest, top, spotlight, genres: genres.filter((g) => g.items.length >= 4) };
-  }, []);
+  const { d, error, reload } = useHomeData();
+  const ready = d.resume !== undefined && d.latest !== undefined;
+  const empty = ready && !d.resume!.length && !d.latest!.some((l) => l.items.length);
+  usePoll(reload, 10000, empty); // libraries still scanning: fill in as titles appear
 
-  const empty = !!data.data && !data.data.resume.length && !data.data.latest.some((l) => l.items.length);
-  usePoll(data.reload, 10000, empty); // libraries still scanning: fill in as titles appear
+  // The billboard rotates through up to 20 titles. Picked once per visit, so it doesn't reshuffle while rows load.
+  const [featured, setFeatured] = useState<Item[]>([]);
+  useEffect(() => {
+    if (!featured.length && d.spotlight && d.latest) setFeatured(featuredPool({ latest: d.latest, spotlight: d.spotlight }));
+  }, [d.spotlight, d.latest, featured.length]);
 
-  // The billboard rotates through up to 20 titles: newest arrivals first, then a random spread of the library.
-  const featured = useMemo(() => featuredPool(data.data), [data.data]);
-
-  if (data.error) return <div className="err-box">Couldn’t load your library: {data.error}</div>;
-  if (!data.data) return <div className="loading">Loading…</div>;
-  const { resume, nextUp, latest, top, genres } = data.data;
+  if (error && !ready) return <div className="err-box">Couldn’t load your library: {error}</div>;
+  const resume = d.resume ?? [];
+  const nextUp = d.nextUp ?? [];
+  const latest = d.latest ?? [];
+  const top = d.top ?? [];
+  const genres = d.genres ?? [];
 
   return (
     <div className="home">
-      {featured.length ? <Rotator items={featured} /> : data.data.resume[0] ? <Billboard item={data.data.resume[0]} /> : <EmptyLibrary />}
+      {featured.length ? <Rotator items={featured} /> : resume[0] ? <Billboard item={resume[0]} /> : empty ? <EmptyLibrary /> : <div className="billboard billboard-wait" aria-hidden="true" />}
       <div className="rows">
         {resume.length > 0 && (
           <Row title={`Continue Watching for ${api.session.user.Name}`}>

@@ -41,6 +41,9 @@ import coil3.compose.AsyncImage
 import stream.reelforge.tv.appState
 import stream.reelforge.tv.data.Item
 import stream.reelforge.tv.data.JellyfinApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import stream.reelforge.tv.ui.components.ContentRow
 import stream.reelforge.tv.ui.components.Icons
@@ -143,24 +146,23 @@ private suspend fun featuredPool(api: JellyfinApi, rows: List<HomeRow>): List<It
     return (newest + random.shuffled()).distinctBy { it.Id }.take(20)
 }
 
-private suspend fun loadHome(api: JellyfinApi, name: String): List<HomeRow> {
-    val views = api.views()
-    val resume = runCatching { api.resume() }.getOrDefault(emptyList())
-    val next = runCatching { api.nextUp() }.getOrDefault(emptyList())
-    val list = runCatching { api.items(types = "Movie,Series", favorites = true, sortBy = "DateCreated,SortName", sortOrder = "Descending", limit = 30).Items }.getOrDefault(emptyList())
-    val libs = views.filter { it.CollectionType == "movies" || it.CollectionType == "tvshows" }
-    return buildList {
-        if (resume.isNotEmpty()) add(HomeRow("Continue Watching for $name", resume))
-        if (next.isNotEmpty()) add(HomeRow("Next Episodes", next))
-        for (l in libs) {
-            val latest = runCatching { api.latest(l.Id) }.getOrDefault(emptyList())
-            if (latest.isNotEmpty()) add(HomeRow("New in ${l.Name}", latest))
-        }
-        if (list.isNotEmpty()) add(HomeRow("My List", list))
-        for (l in libs.filter { it.CollectionType == "movies" }) {
-            val top = runCatching { api.items(parentId = l.Id, types = "Movie", sortBy = "CommunityRating,SortName", sortOrder = "Descending", limit = 10).Items }.getOrDefault(emptyList())
-            if (top.size >= 5) add(HomeRow("Top Rated in ${l.Name}", top, poster = true))
-        }
+private suspend fun loadHome(api: JellyfinApi, name: String): List<HomeRow> = coroutineScope {
+    // Everything at once: on a big library, one-after-another took many seconds.
+    val views = async { api.views() }
+    val resume = async { runCatching { api.resume() }.getOrDefault(emptyList()) }
+    val next = async { runCatching { api.nextUp() }.getOrDefault(emptyList()) }
+    val list = async { runCatching { api.items(types = "Movie,Series", favorites = true, sortBy = "DateCreated,SortName", sortOrder = "Descending", limit = 30).Items }.getOrDefault(emptyList()) }
+    val libs = views.await().filter { it.CollectionType == "movies" || it.CollectionType == "tvshows" }
+    val latest = libs.map { l -> async { l to runCatching { api.latest(l.Id) }.getOrDefault(emptyList()) } }
+    val tops = libs.filter { it.CollectionType == "movies" }.map { l ->
+        async { l to runCatching { api.items(parentId = l.Id, types = "Movie", sortBy = "CommunityRating,SortName", sortOrder = "Descending", limit = 10).Items }.getOrDefault(emptyList()) }
+    }
+    buildList {
+        resume.await().takeIf { it.isNotEmpty() }?.let { add(HomeRow("Continue Watching for $name", it)) }
+        next.await().takeIf { it.isNotEmpty() }?.let { add(HomeRow("Next Episodes", it)) }
+        latest.awaitAll().forEach { (l, items) -> if (items.isNotEmpty()) add(HomeRow("New in ${l.Name}", items)) }
+        list.await().takeIf { it.isNotEmpty() }?.let { add(HomeRow("My List", it)) }
+        tops.awaitAll().forEach { (l, top) -> if (top.size >= 5) add(HomeRow("Top Rated in ${l.Name}", top, poster = true)) }
     }
 }
 

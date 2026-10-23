@@ -74,6 +74,7 @@ public sealed class MediaManagerController : ControllerBase
     private readonly IServerConfigurationManager _serverConfig;
     private readonly ScanService _scans;
     private readonly SavingsLedger _savings;
+    private readonly LibraryScanSchedule _scanSchedule;
 
     public MediaManagerController(
         LibraryReader reader,
@@ -83,8 +84,10 @@ public sealed class MediaManagerController : ControllerBase
         ILibraryManager library,
         IServerConfigurationManager serverConfig,
         ScanService scans,
-        SavingsLedger savings)
+        SavingsLedger savings,
+        LibraryScanSchedule scanSchedule)
     {
+        _scanSchedule = scanSchedule;
         _scans = scans;
         _savings = savings;
         _reader = reader;
@@ -149,6 +152,48 @@ public sealed class MediaManagerController : ControllerBase
                 r.RunningTotalBytes,
             }),
         });
+    }
+
+    // ---------------- Library scan schedule ----------------
+
+    /// <summary>How often libraries are checked for changes, and how the last check went.</summary>
+    [HttpGet("LibraryScan")]
+    public ActionResult<object> LibraryScan()
+    {
+        var t = _scanSchedule.Task;
+        return Ok(new
+        {
+            Minutes = Config.LibraryScanMinutes,
+            Running = t?.State == MediaBrowser.Model.Tasks.TaskState.Running,
+            Progress = t?.CurrentProgress,
+            LastStartUtc = t?.LastExecutionResult?.StartTimeUtc,
+            LastEndUtc = t?.LastExecutionResult?.EndTimeUtc,
+            LastStatus = t?.LastExecutionResult?.Status.ToString(),
+        });
+    }
+
+    public sealed record LibraryScanRequest(int Minutes);
+
+    [HttpPost("LibraryScan")]
+    public ActionResult SetLibraryScan([FromBody] LibraryScanRequest req)
+    {
+        int m = req.Minutes;
+        if (m is < 0 or > 1440)
+        {
+            return BadRequest("Pick between 1 minute and 24 hours, or 0 to turn it off.");
+        }
+
+        Config.LibraryScanMinutes = m;
+        Plugin.Instance!.SaveConfiguration();
+        _scanSchedule.Apply(m);
+        return NoContent();
+    }
+
+    [HttpPost("LibraryScan/Now")]
+    public ActionResult ScanNow()
+    {
+        _scanSchedule.ScanNow();
+        return NoContent();
     }
 
     // ---------------- Duplicates ----------------

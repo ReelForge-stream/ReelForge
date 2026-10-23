@@ -496,6 +496,7 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     ];
     return { TotalSavedBytes: 31.4 * GB, Conversions: 3, OriginalBytes: 48 * GB, NewBytes: 16.6 * GB, Since: rows[2].FinishedUtc, StillHeldBytes: 9.7 * GB, Rows: rows };
   }
+  if (p === '/ReelForge/LibraryScan') return method === 'GET' ? { Minutes: 5, Running: false } : undefined;
   if (p === '/ReelForge/Holding') return held;
   if (p === '/ReelForge/Holding/EmptyAll') { const b = held.reduce((a, h) => a + h.SizeBytes, 0); held = []; return { FreedBytes: b }; }
   if (p.startsWith('/ReelForge/Holding/')) { held = held.filter((h) => h.Id !== p.split('/')[3]); return undefined; }
