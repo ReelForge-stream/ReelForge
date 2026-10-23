@@ -73,6 +73,7 @@ public sealed class MediaManagerController : ControllerBase
     private readonly ILibraryManager _library;
     private readonly IServerConfigurationManager _serverConfig;
     private readonly ScanService _scans;
+    private readonly SavingsLedger _savings;
 
     public MediaManagerController(
         LibraryReader reader,
@@ -81,9 +82,11 @@ public sealed class MediaManagerController : ControllerBase
         EncoderProbe probe,
         ILibraryManager library,
         IServerConfigurationManager serverConfig,
-        ScanService scans)
+        ScanService scans,
+        SavingsLedger savings)
     {
         _scans = scans;
+        _savings = savings;
         _reader = reader;
         _holding = holding;
         _queue = queue;
@@ -112,9 +115,39 @@ public sealed class MediaManagerController : ControllerBase
                 Waiting = _queue.WaitingReason,
                 Queued = jobs.Count(j => j.Status == JobStatus.Queued),
                 Running = jobs.Count(j => j.Status is JobStatus.Running or JobStatus.Verifying),
-                SavedBytes = jobs.Where(j => j.Status == JobStatus.Done && j.ResultBytes is not null).Sum(j => j.OriginalBytes - j.ResultBytes!.Value),
+                SavedBytes = _savings.Summary(0).TotalSavedBytes,
             },
             Holding = new { Count = held.Count, Bytes = held.Sum(h => h.SizeBytes), Days = Config.HoldingDays },
+        });
+    }
+
+    /// <summary>Running total of space saved by Space Saver, with every conversion that contributed.</summary>
+    [HttpGet("Savings")]
+    public ActionResult<object> Savings()
+    {
+        var sum = _savings.Summary();
+        // Replaced originals sit in the holding area until their days are up; that space isn't free yet.
+        long waiting = _holding.List().Where(h => h.Reason.StartsWith("Replaced", StringComparison.Ordinal)).Sum(h => h.SizeBytes);
+        return Ok(new
+        {
+            sum.TotalSavedBytes,
+            sum.Conversions,
+            sum.OriginalBytes,
+            sum.NewBytes,
+            sum.Since,
+            StillHeldBytes = waiting,
+            Rows = sum.Rows.Select(r => new
+            {
+                r.Entry.FinishedUtc,
+                r.Entry.ItemId,
+                r.Entry.Title,
+                r.Entry.Path,
+                r.Entry.OriginalBytes,
+                r.Entry.NewBytes,
+                r.Entry.Encoder,
+                r.SavedBytes,
+                r.RunningTotalBytes,
+            }),
         });
     }
 

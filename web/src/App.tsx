@@ -20,6 +20,7 @@ import Duplicates from './manager/Duplicates';
 import SpaceSaver from './manager/SpaceSaver';
 import Queue from './manager/Queue';
 import Holding from './manager/Holding';
+import Saved from './manager/Saved';
 import ManagerSettings from './manager/Settings';
 import SettingsLayout from './settings/SettingsLayout';
 import SettingsGeneral from './settings/General';
@@ -30,6 +31,7 @@ import SettingsNetwork from './settings/Network';
 import SettingsActivity, { WatchingBadge } from './settings/Activity';
 import Downloads from './pages/Downloads';
 import { DownloadWatcher, useCanDownload } from './lib/download';
+import { InstallBanner, InstallMenuItem } from './lib/install';
 
 // The player pulls in hls.js; load it only when someone presses Play.
 const Player = lazy(() => import('./pages/Player'));
@@ -114,6 +116,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
               <Route path="duplicates" element={<Duplicates />} />
               <Route path="space" element={<SpaceSaver />} />
               <Route path="queue" element={<Queue />} />
+              <Route path="saved" element={<Saved />} />
               <Route path="holding" element={<Holding />} />
               <Route path="settings" element={<ManagerSettings />} />
             </Route>
@@ -186,6 +189,7 @@ function Shell({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
         <Outlet />
       </main>
       <DownloadWatcher />
+      <InstallBanner />
 
       <nav className="tabbar" aria-label="Main">
         <NavLink to="/" end>
@@ -259,6 +263,7 @@ function ProfileMenu({ onSignOut }: { onSignOut: (switchTo?: string) => void }) 
             ))}
           </div>
           <div className="pm-actions">
+            <InstallMenuItem onDone={() => setOpen(false)} />
             {canDownload && (
               <button role="menuitem" className="pm-row" onClick={() => go('/downloads')}>
                 <span className="pm-icon"><Icon.download /></span>

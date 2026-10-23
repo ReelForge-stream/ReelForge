@@ -488,6 +488,14 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     if (j) { j.Status = 'Cancelled'; j.Message = 'Cancelled'; }
     return undefined;
   }
+  if (p === '/ReelForge/Savings') {
+    const rows = [
+      { FinishedUtc: new Date(Date.now() - 3.6e6).toISOString(), ItemId: 'm5', Title: 'Saltwater Kings (2022)', Path: 'D:\\Movies\\Saltwater Kings (2022).mkv', OriginalBytes: 14.9 * GB, NewBytes: 5.2 * GB, Encoder: 'hevc_nvenc', SavedBytes: 9.7 * GB, RunningTotalBytes: 31.4 * GB },
+      { FinishedUtc: new Date(Date.now() - 86.4e6).toISOString(), ItemId: 'm2', Title: 'Northbound Freight (2019)', Path: 'D:\\Movies\\Northbound Freight (2019).mkv', OriginalBytes: 22.1 * GB, NewBytes: 7.6 * GB, Encoder: 'hevc_nvenc', SavedBytes: 14.5 * GB, RunningTotalBytes: 21.7 * GB },
+      { FinishedUtc: new Date(Date.now() - 3 * 86.4e6).toISOString(), ItemId: 'm9', Title: 'Glasshouse (2016)', Path: 'D:\\Movies\\Glasshouse (2016).mkv', OriginalBytes: 11.0 * GB, NewBytes: 3.8 * GB, Encoder: 'hevc_nvenc', SavedBytes: 7.2 * GB, RunningTotalBytes: 7.2 * GB },
+    ];
+    return { TotalSavedBytes: 31.4 * GB, Conversions: 3, OriginalBytes: 48 * GB, NewBytes: 16.6 * GB, Since: rows[2].FinishedUtc, StillHeldBytes: 9.7 * GB, Rows: rows };
+  }
   if (p === '/ReelForge/Holding') return held;
   if (p === '/ReelForge/Holding/EmptyAll') { const b = held.reduce((a, h) => a + h.SizeBytes, 0); held = []; return { FreedBytes: b }; }
   if (p.startsWith('/ReelForge/Holding/')) { held = held.filter((h) => h.Id !== p.split('/')[3]); return undefined; }

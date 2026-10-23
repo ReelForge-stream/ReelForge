@@ -1,6 +1,6 @@
 import type {
   ActiveSession, ActivityEntry, AdminUser, DupGroup, HeldFile, Item, Job, MediaSource, Overview, ScheduledTask, Session, Settings,
-  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult,
+  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult, SavingsResult,
 } from './types';
 import { demo } from './demo';
 import { describeDevice } from './device';
@@ -494,6 +494,7 @@ export class Api {
 
   mm = {
     overview: () => this.get<Overview>('/ReelForge/Overview'),
+    savings: () => this.get<SavingsResult>('/ReelForge/Savings'),
     duplicates: (libraryId?: string) => this.get<DupGroup[]>(`/ReelForge/Duplicates${libraryId ? `?libraryId=${libraryId}` : ''}`),
     removeDuplicates: (files: { ItemId: string; MediaSourceId: string }[]) =>
       this.post<{ Removed: number; Errors: string[]; HoldingDays: number }>('/ReelForge/Duplicates/Remove', { Files: files }),

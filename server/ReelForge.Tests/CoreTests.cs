@@ -706,3 +706,35 @@ public class QueueCleanupTests
         Assert.False(ConversionQueue.IsExpired(Job(JobStatus.Queued, 600), now));
     }
 }
+
+public class SavingsLedgerTests
+{
+    [Fact]
+    public void Keeps_a_running_total_that_survives_a_restart()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"rf-saved-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var t0 = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            SavingsEntry E(int day, long before, long after) => new() { FinishedUtc = t0.AddDays(day), ItemId = Guid.NewGuid(), Title = $"Film {day}", Path = $"/m/{day}.mkv", OriginalBytes = before, NewBytes = after };
+
+            var ledger = new SavingsLedger(NullLogger<SavingsLedger>.Instance, path);
+            Assert.True(ledger.IsEmpty);
+            ledger.Add(E(1, 10_000, 4_000));  // saved 6,000
+            ledger.Add(E(3, 5_000, 4_000));   // saved 1,000
+            ledger.Add(E(2, 8_000, 5_000));   // saved 3,000 (finished between the other two)
+
+            var again = new SavingsLedger(NullLogger<SavingsLedger>.Instance, path); // after a restart
+            var s = again.Summary();
+            Assert.Equal(10_000, s.TotalSavedBytes);
+            Assert.Equal(3, s.Conversions);
+            Assert.Equal(["Film 3", "Film 2", "Film 1"], s.Rows.Select(r => r.Entry.Title)); // newest first
+            Assert.Equal([10_000L, 9_000L, 6_000L], s.Rows.Select(r => r.RunningTotalBytes)); // running total in date order
+            Assert.Equal(t0.AddDays(1), s.Since);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+}

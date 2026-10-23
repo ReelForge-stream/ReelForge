@@ -33,7 +33,7 @@ export default function ManagerOverview() {
       <div className="summary-band">
         <div>
           <div className="k" style={{ color: 'var(--coolant)' }}>{bytes(q.SavedBytes)}</div>
-          <div className="v">saved by conversions so far</div>
+          <div className="v">saved by conversions so far · <Link to="/manager/saved">see each one</Link></div>
         </div>
         <div>
           <div className="k">{q.Running + q.Queued}</div>

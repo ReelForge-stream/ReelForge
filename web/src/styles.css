@@ -1139,3 +1139,34 @@ code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-siz
   .up-next { right: 16px; bottom: 96px; grid-template-columns: 1fr; }
   .up-next-art { display: none; }
 }
+
+/* ---------- Space saved ---------- */
+.saved-note { margin: -8px 0 18px; }
+.saved-table { display: grid; margin-top: 8px; }
+.saved-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 190px 150px 130px; gap: 14px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.saved-row.head { font-size: var(--s-1); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.saved-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.saved-amt { color: var(--coolant); font-weight: 600; }
+.saved-run { font-family: var(--display); font-weight: 600; text-align: right; }
+.saved-row.head span:last-child { text-align: right; }
+@media (max-width: 760px) {
+  .saved-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .saved-row.head { display: none; }
+  .saved-row > span:nth-child(1) { grid-column: 1 / -1; order: -1; }
+  .saved-row > span:nth-child(3) { color: var(--muted); font-size: var(--s-1); }
+}
+
+/* ---------- Install app (phones) ---------- */
+.install-banner { position: fixed; z-index: 40; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 12px 10px 12px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); animation: rise-in 300ms ease; }
+.install-banner img { border-radius: 10px; }
+.install-text { display: grid; gap: 1px; min-width: 0; }
+.install-text span { color: var(--muted); font-size: 13px; line-height: 1.3; }
+.install-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.install-close svg { width: 18px; height: 18px; }
+@media (min-width: 901px) { .install-banner { left: auto; right: 24px; bottom: 24px; width: 420px; } }
+.install-back { align-items: end; padding: 16px 0 0; }
+.install-sheet { width: min(520px, 100%); margin: 0 auto; padding: 24px 22px calc(22px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; background: var(--deep); border: 1px solid var(--line); animation: rise-in 220ms ease; }
+.install-sheet h2 { font-size: var(--s2); margin-bottom: 14px; }
+.install-steps { margin: 0 0 14px; padding-left: 22px; display: grid; gap: 12px; line-height: 1.45; }
+.install-glyph { display: inline-grid; place-items: center; vertical-align: middle; width: 30px; height: 30px; margin: 0 2px; border-radius: 8px; background: var(--surface-2); color: var(--ember); }
+.install-sheet .actions { display: flex; justify-content: flex-end; margin-top: 8px; }

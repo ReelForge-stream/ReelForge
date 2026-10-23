@@ -78,6 +78,7 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ScanService>();
         serviceCollection.AddSingleton<HoldingArea>();
         serviceCollection.AddSingleton<EncoderProbe>();
+        serviceCollection.AddSingleton<SavingsLedger>();
         serviceCollection.AddSingleton<ConversionQueue>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<ConversionQueue>());
         serviceCollection.AddSingleton<NetworkShares>();

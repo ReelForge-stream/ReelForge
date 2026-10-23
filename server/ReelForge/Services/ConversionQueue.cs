@@ -92,6 +92,7 @@ public sealed class ConversionQueue : BackgroundService
     private readonly object _gate = new();
     private readonly string _statePath;
     private readonly List<ConversionJob> _jobs;
+    private readonly SavingsLedger? _ledger;
     private int _running;
     private bool _scanPending;
     private DateTime _lastSave = DateTime.MinValue;
@@ -105,8 +106,10 @@ public sealed class ConversionQueue : BackgroundService
         ILibraryManager library,
         IProviderManager providers,
         IFileSystem fileSystem,
-        ILogger<ConversionQueue> logger)
+        ILogger<ConversionQueue> logger,
+        SavingsLedger? ledger = null)
     {
+        _ledger = ledger;
         _providers = providers;
         _fileSystem = fileSystem;
         _reader = reader;
@@ -119,7 +122,27 @@ public sealed class ConversionQueue : BackgroundService
         Directory.CreateDirectory(dir);
         _statePath = System.IO.Path.Combine(dir, "jobs.json");
         _jobs = LoadJobs();
+
+        // First run with the tally: count conversions that already finished, so nothing done so far is lost.
+        if (_ledger is { IsEmpty: true })
+        {
+            foreach (var j in _jobs.Where(j => j.Status == JobStatus.Done && j.ResultBytes is not null).OrderBy(j => j.FinishedUtc))
+            {
+                _ledger.Add(ToSaving(j));
+            }
+        }
     }
+
+    private static SavingsEntry ToSaving(ConversionJob j) => new()
+    {
+        FinishedUtc = j.FinishedUtc ?? j.CreatedUtc,
+        ItemId = j.ItemId,
+        Title = j.Title,
+        Path = j.Path,
+        OriginalBytes = j.OriginalBytes,
+        NewBytes = j.ResultBytes ?? j.OriginalBytes,
+        Encoder = j.Encoder,
+    };
 
     /// <summary>Gets or sets a value indicating whether the queue is paused by the user.</summary>
     public bool Paused { get; set; }
@@ -402,6 +425,8 @@ public sealed class ConversionQueue : BackgroundService
             job.ResultBytes = newSize;
             job.Status = JobStatus.Done;
             job.Message = $"Saved {(job.OriginalBytes - newSize) / 1e9:F2} GB";
+            job.FinishedUtc ??= DateTime.UtcNow;
+            _ledger?.Add(ToSaving(job));
             _scanPending = true;
         }
         catch (OperationCanceledException)

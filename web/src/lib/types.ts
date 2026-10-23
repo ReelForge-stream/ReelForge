@@ -394,3 +394,13 @@ export interface WatchHistoryResult {
   TrackingSince?: string;
   Users: { Id: string; Name: string }[];
 }
+
+export interface SavingsResult {
+  TotalSavedBytes: number;
+  Conversions: number;
+  OriginalBytes: number;
+  NewBytes: number;
+  Since?: string;
+  StillHeldBytes: number;
+  Rows: { FinishedUtc: string; ItemId: string; Title: string; Path: string; OriginalBytes: number; NewBytes: number; Encoder?: string; SavedBytes: number; RunningTotalBytes: number }[];
+}
