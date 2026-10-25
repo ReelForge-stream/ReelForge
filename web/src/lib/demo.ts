@@ -124,10 +124,16 @@ const space: SpaceSaverResult = {
       SizeBytes: size, EstimatedBytes: est, SavingsBytes: size - est, SavingsFraction: 1 - est / size,
       Note: i % 3 === 1 ? '1080p · VC1 · 5.1 → HEVC' : '1080p · H.264 · 7.1 → HEVC',
     };
-  }).concat(shows.flatMap((s) => [1, 2, 3].map((e): Estimate => ({
-    ItemId: `${s.Id}-1-${e}`, MediaSourceId: `src-${s.Id}-${e}`, Title: `${s.Name} S01E0${e}`, Kind: 'Episode' as const,
-    Path: `T:\\TV\\${s.Name}\\Season 01\\${s.Name} - S01E0${e}.mkv`, Summary: '1080p · H.264 · 5.1',
-    SizeBytes: 3.1 * GB, EstimatedBytes: 1.3 * GB, SavingsBytes: 1.8 * GB, SavingsFraction: 0.58, Note: '1080p · H.264 · 5.1 → HEVC',
+  }).concat(shows.slice(0, 4).flatMap((s, si) => [1, 2, 3].slice(0, 3 - (si % 2)).flatMap((season) => [1, 2, 3, 4, 5].map((e): Estimate => {
+    const size = (2.4 + ((e * 7 + season) % 5) * 0.3) * GB;
+    const est = size * 0.42;
+    const se = `S0${season}E0${e}`;
+    return {
+      ItemId: `${s.Id}-${season}-${e}`, MediaSourceId: `src-${s.Id}-${season}-${e}`, Title: `${s.Name} ${se} · Episode ${e}`, Kind: 'Episode' as const,
+      Path: `T:\\TV\\${s.Name}\\Season 0${season}\\${s.Name} - ${se}.mkv`, Summary: '1080p · H.264 · 5.1',
+      SizeBytes: size, EstimatedBytes: est, SavingsBytes: size - est, SavingsFraction: 0.58, Note: '1080p · H.264 · 5.1 → HEVC',
+      SeriesId: s.Id, SeriesName: s.Name, SeasonNumber: season, EpisodeNumber: e,
+    };
   })))).sort((a, b) => b.SavingsBytes - a.SavingsBytes),
   TotalSavingsBytes: 0,
   TotalCandidateBytes: 0,

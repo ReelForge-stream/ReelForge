@@ -40,7 +40,11 @@ public sealed record EstimateDto(
     long EstimatedBytes,
     long SavingsBytes,
     double SavingsFraction,
-    string Note);
+    string Note,
+    Guid? SeriesId = null,
+    string? SeriesName = null,
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null);
 
 public sealed record SpaceSaverResult(
     IReadOnlyList<EstimateDto> Candidates,
@@ -317,7 +321,11 @@ public sealed class MediaManagerController : ControllerBase
                 e.EstimatedSizeBytes,
                 e.SavingsBytes,
                 Math.Round(e.SavingsFraction, 3),
-                e.Reason)).ToList(),
+                e.Reason,
+                e.File.SeriesId,
+                e.File.SeriesName,
+                e.File.SeasonNumber,
+                e.File.EpisodeNumber)).ToList(),
             candidates.Sum(c => c.SavingsBytes),
             candidates.Sum(c => c.File.SizeBytes),
             files.Count,

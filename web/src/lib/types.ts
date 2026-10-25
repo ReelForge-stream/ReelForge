@@ -166,6 +166,11 @@ export interface Estimate {
   SavingsBytes: number;
   SavingsFraction: number;
   Note: string;
+  /** Episodes: which show and season it belongs to (for grouping). */
+  SeriesId?: string | null;
+  SeriesName?: string | null;
+  SeasonNumber?: number | null;
+  EpisodeNumber?: number | null;
 }
 
 export interface SpaceSaverResult {

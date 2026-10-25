@@ -1269,3 +1269,27 @@ a.cast-card:hover .cast-name { color: var(--ember); }
   .cast-row { grid-auto-columns: 100px; }
   .cast-photo { width: 84px; height: 84px; }
 }
+
+/* Space Saver: shows → seasons → episodes */
+.saver-heading { margin: 28px 0 8px; font-size: var(--s1, 1.1rem); font-weight: 600; }
+.saver-shows tr.saver-show td { background: rgba(232, 237, 242, 0.025); cursor: pointer; }
+.saver-shows tr.saver-season td { cursor: pointer; }
+.saver-shows tr.saver-season td:nth-child(2) { padding-left: 34px; }
+.saver-shows tr.saver-episode td:nth-child(2) { padding-left: 66px; }
+.saver-expand { background: none; border: 0; color: var(--muted); padding: 0 8px 0 0; cursor: pointer; font-size: 1.15em; line-height: 1; vertical-align: -1px; }
+.saver-expand .chev { display: inline-block; transition: transform 150ms ease; }
+.saver-expand[aria-expanded='true'] .chev { transform: rotate(90deg); }
+.saver-expand:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; border-radius: 4px; }
+.nowrap { white-space: nowrap; }
+.show-sm { display: none; }
+.saver-season-btn { margin-left: 10px; }
+@media (max-width: 760px) {
+  .table .show-sm { display: inline-flex; }
+  .saver-shows tr.saver-season td:nth-child(2) { padding-left: 18px; }
+  .saver-shows tr.saver-episode td:nth-child(2) { padding-left: 30px; }
+  .saver-season-btn { margin: 6px 0 0; display: flex; }
+  .saver-shows td, .saver-shows th { padding-left: 6px; padding-right: 6px; }
+  .saver-shows .pct { display: none; }
+}
+.check:indeterminate { border-color: var(--ember); }
+.check:indeterminate::after { content: ''; width: 10px; height: 2px; border-radius: 1px; background: var(--ember); }
