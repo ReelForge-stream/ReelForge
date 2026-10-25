@@ -1,0 +1,22 @@
+[
+  {
+    "description": "ReelForge look: logo, colors and artwork",
+    "author": "ReelForge"
+  },
+  {
+    "description": "Featured row at the top of Home that rotates through unwatched movies and shows",
+    "author": "ReelForge"
+  },
+  {
+    "description": "IMDb and Rotten Tomatoes scores on movie and show pages",
+    "author": "ReelForge"
+  },
+  {
+    "description": "Asks \"Are you still watching?\" after 2 episodes play on their own (Settings > Playback)",
+    "author": "ReelForge"
+  },
+  {
+    "description": "Built on the open-source Jellyfin app for Roku (GPL-2.0)",
+    "author": "Jellyfin project"
+  }
+]

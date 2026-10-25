@@ -1,0 +1,17 @@
+import "pkg:/source/api/baserequest.bs"
+import "pkg:/source/utils/config.bs"
+
+sub init()
+    m.top.functionName = "loadRatings"
+end sub
+
+' GET /ReelForge/Ratings/{itemId} → { ImdbId, Imdb, ImdbVotes, RottenTomatoes, Metacritic, Community, Source }
+' Older servers without the plugin answer 404; the details page then keeps what the library has.
+sub loadRatings()
+    if m.top.itemId = invalid or m.top.itemId = "" then return
+    req = APIRequest(`ReelForge/Ratings/${m.top.itemId}`)
+    if req = invalid then return
+    data = getJson(req)
+    if type(data) <> "roAssociativeArray" then return
+    m.top.ratings = data
+end sub

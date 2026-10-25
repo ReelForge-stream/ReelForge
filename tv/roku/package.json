@@ -1,0 +1,31 @@
+{
+  "name": "reelforge-roku",
+  "type": "module",
+  "version": "0.9.9",
+  "description": "ReelForge for Roku (based on the Jellyfin Roku app)",
+  "dependencies": {
+    "@rokucommunity/bslib": "0.1.1",
+    "brighterscript-formatter": "1.8.3"
+  },
+  "devDependencies": {
+    "@rokucommunity/bslint": "0.8.46",
+    "brighterscript": "0.73.5",
+    "jshint": "2.13.6",
+    "rimraf": "6.1.3",
+    "roku-deploy": "3.18.4",
+    "undent": "1.0.1"
+  },
+  "scripts": {
+    "build": "npx rimraf build/ out/ && npx bsc --project bsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ReelForge-stream/ReelForge.git"
+  },
+  "keywords": [
+    "reelforge",
+    "roku"
+  ],
+  "author": "ReelForge (based on work by the Jellyfin project)",
+  "license": "GPL-2.0"
+}

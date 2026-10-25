@@ -1,0 +1,16 @@
+{
+  "files": [
+    "manifest",
+    "source/**/*.*",
+    "components/**/*.*",
+    "images/**/*.*",
+    "locale/**/*.*",
+    "settings/*.*"
+  ],
+  "plugins": ["@rokucommunity/bslint"],
+  "diagnosticFilters": ["node_modules/**/*", "**/roku_modules/**/*"],
+  "sourceMap": false,
+  "autoImportComponentScript": true,
+  "stagingDir": "build/staging",
+  "retainStagingDir": true
+}

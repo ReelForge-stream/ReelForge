@@ -47,3 +47,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Test and build the Google TV app
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+  roku:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tv/roku
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tv/roku/package-lock.json
+      - name: Check for leftover Jellyfin branding
+        run: scripts/check-branding.sh
+      - name: Compile and package the Roku app
+        run: npm ci --no-audit --no-fund && npm run build && unzip -l out/roku.zip | grep -q "^.* manifest$"

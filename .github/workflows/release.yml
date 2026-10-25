@@ -150,6 +150,34 @@ jobs:
           tag_name: ${{ env.TAG }}
           files: tv/android/ReelForge-AndroidTV-${{ needs.module.outputs.version }}.apk
 
+  roku:
+    # A .zip to sideload on Rokus in developer mode (see tv/roku/README.md).
+    needs: module
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tv/roku
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tv/roku/package-lock.json
+      - name: Build the Roku app
+        env:
+          RELEASE_VERSION: ${{ needs.module.outputs.version }}
+        run: |
+          scripts/check-branding.sh
+          python3 scripts/set-version.py "$RELEASE_VERSION"
+          npm ci --no-audit --no-fund
+          npm run build
+          cp out/roku.zip "ReelForge-Roku-${RELEASE_VERSION}.zip"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: tv/roku/ReelForge-Roku-${{ needs.module.outputs.version }}.zip
+
   update-feed:
     # Publish to the feed only after both downloads exist.
     needs: [module, installer]

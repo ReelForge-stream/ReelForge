@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge: looks up IMDb and Rotten Tomatoes scores from the ReelForge server plugin (cached there from OMDb). -->
+<component name="ReelForgeRatingsTask" extends="Task">
+  <interface>
+    <field id="itemId" type="string" />
+    <field id="ratings" type="assocarray" />
+  </interface>
+</component>
