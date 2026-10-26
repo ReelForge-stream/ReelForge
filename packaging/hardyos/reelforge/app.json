@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "id": "stream.reelforge.server",
+  "name": "ReelForge",
+  "version": "0.0.0",
+  "summary": "Your own streaming service: movies and TV on every screen, with duplicates found and files shrunk for you.",
+  "description": "ReelForge streams your movies and shows to TVs, phones and browsers, converting on the graphics card when a device needs it. Its Media Manager finds duplicate copies and re-encodes files to take up far less space, keeping every audio track and subtitle. Apps for Google TV and Roku sign in to it directly.",
+  "category": "Media",
+  "developer": { "name": "ReelForge", "website": "https://reelforge.stream" },
+  "support": "https://github.com/ReelForge-stream/ReelForge/issues",
+  "license": "GPL-2.0-or-later",
+  "icon": "icon.svg",
+  "architectures": ["amd64"],
+  "requirements": { "memoryMB": 2048, "storageGB": 10 },
+
+  "compose": "compose.yaml",
+  "service": "reelforge",
+  "image": "ghcr.io/reelforge-stream/reelforge:0.0.0",
+  "network": "host",
+  "ports": [
+    { "port": 8096, "protocol": "tcp", "label": "Web interface and apps" },
+    { "port": 7359, "protocol": "udp", "label": "Lets TV apps find the server on your network" }
+  ],
+
+  "storage": [
+    {
+      "id": "config",
+      "variable": "APP_DATA_CONFIG",
+      "label": "Settings, accounts, watch history and library database",
+      "snapshots": true,
+      "backup": true
+    },
+    {
+      "id": "cache",
+      "variable": "APP_DATA_CACHE",
+      "label": "Artwork cache and conversions in progress",
+      "snapshots": false,
+      "backup": false
+    }
+  ],
+
+  "inputs": [
+    {
+      "id": "media",
+      "type": "folder",
+      "variable": "RF_MEDIA",
+      "label": "Movies and TV folder",
+      "help": "The folder that holds your movies and shows (subfolders are fine). It appears inside ReelForge as /media, so add your libraries from there.",
+      "required": true,
+      "access": "read-write",
+      "accessReason": "Space Saver replaces files with smaller copies and Duplicates moves extra copies into a holding folder, so ReelForge needs to write here."
+    },
+    {
+      "id": "media2",
+      "type": "folder",
+      "variable": "RF_MEDIA_2",
+      "label": "Another media folder (optional)",
+      "help": "Use this if your shows live somewhere else, for example a second share. It appears inside ReelForge as /media2.",
+      "required": false,
+      "access": "read-write"
+    }
+  ],
+
+  "gpu": {
+    "required": false,
+    "help": "With a graphics card, ReelForge converts video for phones and TVs many times faster and uses far less CPU.",
+    "prefer": ["nvidia", "intel", "amd"],
+    "vendors": {
+      "nvidia": { "compose": "gpu/nvidia.yaml", "hostRequires": ["nvidia-driver", "nvidia-container-toolkit"] },
+      "intel":  { "compose": "gpu/intel.yaml",  "hostRequires": ["dri-render-node"] },
+      "amd":    { "compose": "gpu/amd.yaml",    "hostRequires": ["dri-render-node"] }
+    }
+  },
+
+  "web": { "port": 8096, "path": "/reelforge/", "open": "tab", "label": "Open ReelForge" },
+  "health": { "type": "http", "port": 8096, "path": "/health", "startupSeconds": 120 },
+  "firstRun": "Open ReelForge, create your admin account, then add libraries from /media (and /media2 if you chose a second folder)."
+}

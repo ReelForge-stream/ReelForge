@@ -13,3 +13,4 @@ packaging/windows/dist/
 .DS_Store
 Thumbs.db
 web/.test/
+packaging/docker/prebuilt/

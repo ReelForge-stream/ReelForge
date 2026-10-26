@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hardyos.dev/schemas/app-1.json",
+  "title": "HardyOS app manifest, format 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "id", "name", "version", "summary", "category", "icon", "architectures", "compose", "service", "image", "network", "storage", "web", "health"],
+  "properties": {
+    "format": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+)+$", "maxLength": 100 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+([-+][0-9A-Za-z.-]+)?$" },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "description": { "type": "string", "maxLength": 2000 },
+    "category": { "enum": ["Media", "Photos", "Files", "Productivity", "Home", "Network", "Security", "Development", "Games", "Other"] },
+    "developer": {
+      "type": "object", "additionalProperties": false, "required": ["name"],
+      "properties": { "name": { "type": "string" }, "website": { "type": "string", "format": "uri" } }
+    },
+    "support": { "type": "string", "format": "uri" },
+    "license": { "type": "string" },
+    "icon": { "type": "string", "pattern": "^[^/][^.]*\\.(svg|png)$" },
+    "architectures": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["amd64", "arm64"] } },
+    "requirements": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "memoryMB": { "type": "integer", "minimum": 0 }, "storageGB": { "type": "integer", "minimum": 0 } }
+    },
+    "compose": { "type": "string", "pattern": "^[^/].*\\.ya?ml$" },
+    "service": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+    "image": { "type": "string", "pattern": "^[a-z0-9./_-]+:(?!latest$)[A-Za-z0-9._-]+$" },
+    "network": { "enum": ["host", "bridge"] },
+    "ports": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["port", "protocol", "label"],
+        "properties": {
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "protocol": { "enum": ["tcp", "udp"] },
+          "label": { "type": "string" }
+        }
+      }
+    },
+    "storage": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "variable", "label"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "variable": { "$ref": "#/$defs/variable" },
+          "label": { "type": "string" },
+          "snapshots": { "type": "boolean" },
+          "backup": { "type": "boolean" }
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "type", "variable", "label", "required"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "type": { "const": "folder" },
+          "variable": { "$ref": "#/$defs/variable" },
+          "label": { "type": "string" },
+          "help": { "type": "string" },
+          "required": { "type": "boolean" },
+          "access": { "enum": ["read-only", "read-write"] },
+          "accessReason": { "type": "string" }
+        }
+      }
+    },
+    "gpu": {
+      "type": "object", "additionalProperties": false, "required": ["required", "vendors"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "help": { "type": "string" },
+        "prefer": { "type": "array", "items": { "$ref": "#/$defs/vendor" }, "uniqueItems": true },
+        "vendors": {
+          "type": "object", "additionalProperties": false, "minProperties": 1,
+          "patternProperties": {
+            "^(nvidia|intel|amd)$": {
+              "type": "object", "additionalProperties": false, "required": ["compose"],
+              "properties": {
+                "compose": { "type": "string", "pattern": "^gpu/[a-z]+\\.ya?ml$" },
+                "hostRequires": { "type": "array", "items": { "enum": ["nvidia-driver", "nvidia-container-toolkit", "dri-render-node"] } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "web": {
+      "type": "object", "additionalProperties": false, "required": ["port", "path"],
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "path": { "type": "string", "pattern": "^/" },
+        "open": { "enum": ["window", "tab"] },
+        "label": { "type": "string" }
+      }
+    },
+    "health": {
+      "type": "object", "additionalProperties": false, "required": ["type", "port", "path"],
+      "properties": {
+        "type": { "const": "http" },
+        "port": { "type": "integer" },
+        "path": { "type": "string", "pattern": "^/" },
+        "startupSeconds": { "type": "integer", "minimum": 5, "maximum": 900 }
+      }
+    },
+    "firstRun": { "type": "string" }
+  },
+  "$defs": {
+    "variable": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "vendor": { "enum": ["nvidia", "intel", "amd"] }
+  }
+}

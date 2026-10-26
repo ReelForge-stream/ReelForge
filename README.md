@@ -25,6 +25,10 @@ Afterwards, `http://<server>:8096/` always opens ReelForge. Advanced settings (u
 - Add libraries by network path (`\\nas\media\Movies`), not by mapped drive letter. A Windows service can't see `Z:` drives.
 - Run the service as your Windows account: open services.msc, then **ReelForge Media Server → Log On**. The default account (LocalSystem) has no access to network shares.
 
+**Linux, Docker or a HardyOS NAS?** Use the image `ghcr.io/reelforge-stream/reelforge:<version>` (Jellyfin with
+ReelForge built in), or install `ReelForge-<version>.hardyapp` from the HardyOS App Store. See
+[packaging/hardyos](packaging/hardyos/README.md).
+
 ## Updates
 
 You don't need to do anything:
@@ -45,7 +49,9 @@ git tag v0.2.0 && git push origin v0.2.0
 The [Release workflow](.github/workflows/release.yml) then:
 1. tests and builds the module and attaches `ReelForge_0.2.0.0.zip`;
 2. builds `ReelForge-Setup-0.2.0.exe` on Windows and attaches it;
-3. adds the version to the update feed (the `update-feed` branch's `manifest.json`).
+3. builds the TV apps (`ReelForge-AndroidTV-0.2.0.apk`, `ReelForge-Roku-0.2.0.zip`), the Docker image
+   (`ghcr.io/reelforge-stream/reelforge:0.2.0`) and the HardyOS package (`ReelForge-0.2.0.hardyapp`);
+4. adds the version to the update feed (the `update-feed` branch's `manifest.json`).
 
 Every server picks it up within a day.
 

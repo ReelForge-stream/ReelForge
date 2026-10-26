@@ -8,6 +8,8 @@ name: Release
 #   2. ReelForge-Setup-0.2.0.exe - the all-in-one Windows installer
 #   3. ReelForge-Agent.exe - the conversion agent for other PCs (installed by the script in Media Manager → Agents)
 #   3b. ReelForge-AndroidTV-0.2.0.apk - the Google TV / Android TV app (sideload; it updates itself)
+#   3c. ReelForge-Roku-0.2.0.zip - the Roku app (developer-mode sideload)
+#   3d. ghcr.io/reelforge-stream/reelforge:0.2.0 (Docker image) and ReelForge-0.2.0.hardyapp (HardyOS App Store package)
 #   4. the update feed (branch "update-feed", manifest.json)
 on:
   push:
@@ -177,6 +179,45 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           files: tv/roku/ReelForge-Roku-${{ needs.module.outputs.version }}.zip
+
+  docker:
+    # The Linux/NAS image, and the HardyOS package that runs it.
+    needs: module
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name
+        id: img
+        run: echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/reelforge" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile
+          build-args: |
+            RF_VERSION=${{ needs.module.outputs.version }}
+            JELLYFIN_TAG=${{ env.JELLYFIN_VERSION }}
+          push: true
+          tags: |
+            ${{ steps.img.outputs.name }}:${{ needs.module.outputs.version }}
+            ${{ steps.img.outputs.name }}:latest
+      - name: HardyOS package
+        run: |
+          pip install --quiet jsonschema
+          V=${{ needs.module.outputs.version }}
+          python3 scripts/hardyapp.py pack packaging/hardyos/reelforge --version "$V" -o "ReelForge-$V.hardyapp"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: ReelForge-${{ needs.module.outputs.version }}.hardyapp
 
   update-feed:
     # Publish to the feed only after both downloads exist.

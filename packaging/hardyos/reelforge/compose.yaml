@@ -1,0 +1,25 @@
+# ReelForge on HardyOS. HardyOS fills in every ${VARIABLE} (see packaging/hardyos/FORMAT.md)
+# and adds the matching gpu/<vendor>.yaml file when the server has a usable graphics card.
+services:
+  reelforge:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    # Host networking so TV apps can find the server (UDP broadcast on 7359 doesn't cross Docker's NAT)
+    network_mode: host
+    user: "${APP_UID}:${APP_GID}"
+    environment:
+      TZ: ${TZ}
+      RF_GPU: none
+    volumes:
+      - ${APP_DATA_CONFIG}:/config
+      - ${APP_DATA_CACHE}:/cache
+      - ${RF_MEDIA}:/media
+      - ${RF_MEDIA_2}:/media2
+    labels:
+      os.hardy.app: ${APP_ID}
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

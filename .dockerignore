@@ -1,0 +1,10 @@
+# Only web/, server/ and packaging/docker/ are needed to build the image
+**/bin/
+**/obj/
+**/node_modules/
+server/ReelForge/Web/
+tv/
+brand/
+packaging/windows/
+.git/
+*.md

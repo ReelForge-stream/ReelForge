@@ -64,3 +64,30 @@ jobs:
         run: scripts/check-branding.sh
       - name: Compile and package the Roku app
         run: npm ci --no-audit --no-fund && npm run build && unzip -l out/roku.zip | grep -q "^.* manifest$"
+
+  docker:
+    # Builds the Linux/NAS image from source (not pushed) and checks the HardyOS package.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile
+          build-args: RF_VERSION=0.0.1
+          push: false
+          load: true
+          tags: reelforge:ci
+      - name: Start the image and check ReelForge loads
+        run: |
+          docker run -d --name rf -p 8096:8096 reelforge:ci
+          for i in $(seq 1 60); do curl -fsS http://localhost:8096/health >/dev/null 2>&1 && break; sleep 3; done
+          for i in $(seq 1 20); do code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8096/reelforge/); [ "$code" = 200 ] && break; sleep 3; done
+          docker logs rf 2>&1 | grep -E "Loaded plugin: ReelForge"
+          test "$code" = 200
+      - name: Check the HardyOS package
+        run: |
+          pip install --quiet jsonschema
+          python3 scripts/hardyapp.py validate packaging/hardyos/reelforge
+          python3 scripts/hardyapp.py pack packaging/hardyos/reelforge --version 0.0.1 -o /tmp/ReelForge-0.0.1.hardyapp
