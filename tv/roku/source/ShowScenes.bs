@@ -577,14 +577,6 @@ function CreateSigninGroup(user = "", profileImageUri = "")
                 ' Signed in by approving the QR code on a phone (the QuickConnect task already logged in)
                 set_setting("saveCredentials", saveCredentials.checkedState[0].toStr())
                 return "true"
-            else if msg.getField() = "authenticated"
-                authenticated = msg.getData()
-                if authenticated
-                    ' Quick connect authentication was successful...
-                    return "true"
-                else
-                    m.global.sceneManager.callFunc("standardDialog", "Quick Connect Error", { data: ["<p>" + tr("There was an error authenticating via Quick Connect.") + "</p>"] })
-                end if
             end if
         end if
     end while

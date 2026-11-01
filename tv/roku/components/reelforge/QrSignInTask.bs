@@ -12,5 +12,5 @@ sub startQuickConnect()
         m.top.result = { error: true }
         return
     end if
-    m.top.result = { Code: json.Code, Secret: json.Secret }
+    m.top.result = { error: false, Code: json.Code, Secret: json.Secret }
 end sub

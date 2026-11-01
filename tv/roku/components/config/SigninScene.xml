@@ -67,7 +67,7 @@
   <interface>
     <field id="user" type="string" onchange="onUserChange" value="" />
     <field id="profileImageUri" type="string" onchange="onProfileImageUriChange" value="" alwaysNotify="true" />
-    <field id="alert" type="string" onchange="onAlertChange" value="" />
+    <field id="alert" type="string" onchange="onAlertChange" value="" alwaysNotify="true" />
     <!-- ReelForge: set once a phone approves this TV; ShowScenes then finishes signing in -->
     <field id="qrAuthenticated" type="boolean" value="false" alwaysNotify="true" />
   </interface>

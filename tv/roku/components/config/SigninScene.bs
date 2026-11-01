@@ -97,6 +97,11 @@ sub onAlertChange()
 
     errorMessage = m.top.findNode("errorMessage")
     errorMessage.text = m.top.alert
+
+    ' A failed password sign-in: bring phone sign-in back with a fresh code
+    if isValidAndNotEmpty(m.top.alert) and isValid(m.qrActive) and m.qrActive and m.qrSecret = ""
+        requestQrCode()
+    end if
 end sub
 
 sub onUserChange()
@@ -237,11 +242,14 @@ sub initQrSignIn()
     m.qrRefreshTimer = m.top.findNode("qrRefreshTimer")
     m.qrRefreshTimer.observeField("fire", "onNewQrCode")
     m.qrImage.observeField("loadStatus", "onQrImageStatus")
+    ' A password sign-in stops phone sign-in, so the two can't both log in at once
+    m.submit.observeField("selected", "onPasswordSubmit")
     m.qrSecret = ""
-    requestQrCode()
+    m.qrActive = false ' true only while this screen is showing (OnScreenShown starts the first code)
 end sub
 
 sub requestQrCode()
+    if not m.qrActive then return
     m.qrPollTimer.control = "stop"
     m.qrSecret = ""
     m.qrImage.uri = ""
@@ -250,15 +258,26 @@ sub requestQrCode()
     m.qrCode.text = ""
     m.qrHelp.text = ""
 
+    ' Only the newest request counts: forget any earlier one still on its way
+    if isValid(m.qrInitTask)
+        m.qrInitTask.unobserveField("result")
+        m.qrInitTask.control = "STOP"
+    end if
     m.qrInitTask = CreateObject("roSGNode", "QrSignInTask")
     m.qrInitTask.observeField("result", "onQrCode")
     m.qrInitTask.control = "RUN"
 end sub
 
-sub onQrCode()
-    result = m.qrInitTask.result
-    m.qrInitTask.unobserveField("result")
-    if not isValid(result) or result.error = true or not isValid(result.Code)
+sub onQrCode(event as object)
+    task = event.getRoSGNode()
+    if not isValid(m.qrInitTask) or not task.isSameNode(m.qrInitTask) then return
+    task.unobserveField("result")
+    if not m.qrActive then return
+
+    result = event.getData()
+    failed = not isValid(result) or not isValid(result.Code) or not isValid(result.Secret)
+    if not failed and isValid(result.error) then failed = (result.error = true)
+    if failed
         m.qrLoading.text = tr("Phone sign-in is turned off on this server.")
         m.qrHelp.text = tr("Use your password instead, or turn on Quick Connect in the server's settings.")
         return
@@ -287,8 +306,9 @@ sub onQrImageStatus()
 end sub
 
 sub onQrPoll()
-    if m.qrSecret = "" then return
+    if not m.qrActive or m.qrSecret = "" then return
     if isValid(m.qrCheckTask) and m.qrCheckTask.state = "run" then return
+    if isValid(m.qrCheckTask) then m.qrCheckTask.unobserveField("authenticated")
     m.qrCheckTask = CreateObject("roSGNode", "QuickConnect")
     m.qrCheckTask.secret = m.qrSecret
     m.qrCheckTask.saveCredentials = m.top.findNode("saveCredentials").checkedState[0]
@@ -296,10 +316,15 @@ sub onQrPoll()
     m.qrCheckTask.control = "RUN"
 end sub
 
-sub onQrChecked()
-    if not isValid(m.qrCheckTask) then return
-    if m.qrCheckTask.authenticated > 0
+sub onQrChecked(event as object)
+    task = event.getRoSGNode()
+    if not isValid(m.qrCheckTask) or not task.isSameNode(m.qrCheckTask) then return
+    if not m.qrActive then return
+    if task.authenticated > 0
         stopQrSignIn()
+        ' Close the on-screen keyboard if it was open over the password form
+        scene = m.top.getScene()
+        if isValid(scene) and isValid(scene.dialog) then scene.dialog.close = true
         m.top.qrAuthenticated = true
     end if
 end sub
@@ -308,18 +333,32 @@ sub onNewQrCode()
     requestQrCode()
 end sub
 
-sub stopQrSignIn()
-    if isValid(m.qrPollTimer) then m.qrPollTimer.control = "stop"
-    if isValid(m.qrRefreshTimer) then m.qrRefreshTimer.control = "stop"
-    m.qrSecret = ""
-end sub
-
-' Stop asking the server once this screen goes away (signed in with a password, or Back).
-sub OnScreenHidden()
+sub onPasswordSubmit()
     stopQrSignIn()
 end sub
 
-' Show the code again when coming back to this screen.
+' Stops everything phone sign-in is doing; OnScreenShown starts a fresh code if the screen comes back.
+sub stopQrSignIn()
+    if isValid(m.qrPollTimer) then m.qrPollTimer.control = "stop"
+    if isValid(m.qrRefreshTimer) then m.qrRefreshTimer.control = "stop"
+    if isValid(m.qrInitTask)
+        m.qrInitTask.unobserveField("result")
+        m.qrInitTask.control = "STOP"
+    end if
+    if isValid(m.qrCheckTask)
+        m.qrCheckTask.unobserveField("authenticated")
+        m.qrCheckTask.control = "STOP"
+    end if
+    m.qrSecret = ""
+end sub
+
+' Stop asking the server once this screen goes away (signed in, Back, or another screen on top).
+sub OnScreenHidden()
+    m.qrActive = false
+    stopQrSignIn()
+end sub
+
+' Showing the screen (first time or coming back) starts phone sign-in with a fresh code.
 sub OnScreenShown()
     group = m.global.sceneManager.callFunc("getActiveScene")
     if isValid(m.top.lastFocus)
@@ -329,7 +368,11 @@ sub OnScreenShown()
         m.top.setFocus(true)
         if isValid(group) then group.lastFocus = m.top
     end if
-    if isValid(m.qrPollTimer) and m.qrSecret = "" then requestQrCode()
+
+    m.qrActive = true
+    if isValid(m.qrPollTimer) and m.qrSecret = "" and not (isValid(m.qrInitTask) and m.qrInitTask.state = "run")
+        requestQrCode()
+    end if
 end sub
 
 function rfServerUrl() as string
