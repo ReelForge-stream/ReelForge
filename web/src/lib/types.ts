@@ -444,6 +444,28 @@ export interface AgentInfo {
   Jobs: { Id: string; Title: string; Progress: number; Speed: number; EtaSeconds?: number; Encoder?: string; Status: string; Phase?: JobPhase | null; BytesPerSecond?: number | null }[];
 }
 
+/** A Roku TV running the ReelForge app (Media Manager → TVs). */
+export interface TvInfo {
+  Id: string;
+  Name: string;
+  Model?: string | null;
+  Ip?: string | null;
+  AppVersion?: string | null;
+  UserName?: string | null;
+  LastSeenUtc: string;
+  AutoUpdate: boolean;
+  UpToDate: boolean;
+  Updating: boolean;
+  Status?: string | null;
+  StatusIsError: boolean;
+  StatusUtc: string;
+}
+
+export interface TvsResult {
+  ServerVersion: string;
+  Tvs: TvInfo[];
+}
+
 export interface AgentsResult {
   PairingKey: string;
   ServerVersion: string;

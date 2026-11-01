@@ -89,6 +89,10 @@ sub Main (args as dynamic) as void
 
     displayWhatsNewPopup(args)
 
+    ' ReelForge: check in with the server, which updates this app on the TV when a new version is out
+    m.tvCheckIn = CreateObject("roSGNode", "TvCheckInTask")
+    m.tvCheckIn.control = "RUN"
+
     ' Handle input messages
     input = CreateObject("roInput")
     input.SetMessagePort(m.port)

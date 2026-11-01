@@ -1,6 +1,6 @@
 [
   {
-    "description": "ReelForge look: logo, colors and artwork",
+    "description": "New ReelForge look: billboard, top menu, rows and details pages like the web app",
     "author": "ReelForge"
   },
   {
@@ -8,7 +8,7 @@
     "author": "ReelForge"
   },
   {
-    "description": "Featured row at the top of Home that rotates through unwatched movies and shows",
+    "description": "Billboard at the top of Home that rotates through new and unwatched movies and shows",
     "author": "ReelForge"
   },
   {

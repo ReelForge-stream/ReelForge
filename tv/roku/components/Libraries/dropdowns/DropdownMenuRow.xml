@@ -3,8 +3,8 @@
   <children>
     <LayoutGroup id="dropdownOptions" layoutDirection="horiz" itemSpacings="[15]">
       <LayoutGroup layoutDirection="vert" itemSpacings="[10]">
-        <Text font="font:SmallSystemFont" text="Search" />
-        <Poster id="voiceBoxBackground" uri="pkg:/images/white.9.png" blendColor="#FFFFFF" height="75" width="335">
+        <Text id="searchLabel" font="font:SmallSystemFont" text="Search" />
+        <Poster id="voiceBoxBackground" uri="pkg:/images/rf/rf-round.9.png" blendColor="#2B3846" height="75" width="335">
           <VoiceTextEditBox
             id="voiceBox"
             fontUri="font:SmallSystemFont"
@@ -15,7 +15,7 @@
             hintText="Press OK to type"
             visible="true"
             width="335"
-            textColor="#777777"
+            textColor="#E8EDF2"
             clearOnDownKey="false" />
         </Poster>
       </LayoutGroup>
@@ -26,7 +26,7 @@
           iconSide="right"
           fontSize="28"
           padding="35"
-          icon="pkg:/images/icons/dropdown-dark.png"
+          icon="pkg:/images/icons/dropdown-light.png"
           focusIcon="pkg:/images/icons/dropdown-light.png"
           text=""
           height="75"
@@ -39,7 +39,7 @@
           iconSide="right"
           fontSize="28"
           padding="35"
-          icon="pkg:/images/icons/dropdown-dark.png"
+          icon="pkg:/images/icons/dropdown-light.png"
           focusIcon="pkg:/images/icons/dropdown-light.png"
           text=""
           height="75"
@@ -52,7 +52,7 @@
           iconSide="right"
           fontSize="28"
           padding="35"
-          icon="pkg:/images/icons/dropdown-dark.png"
+          icon="pkg:/images/icons/dropdown-light.png"
           focusIcon="pkg:/images/icons/dropdown-light.png"
           text=""
           height="75"
@@ -65,7 +65,7 @@
           iconSide="right"
           fontSize="28"
           padding="35"
-          icon="pkg:/images/icons/dropdown-dark.png"
+          icon="pkg:/images/icons/dropdown-light.png"
           focusIcon="pkg:/images/icons/dropdown-light.png"
           text=""
           height="75"

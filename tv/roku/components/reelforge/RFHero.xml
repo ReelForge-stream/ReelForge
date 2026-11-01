@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge billboard: the title's artwork fills the screen behind Home, with its name, details and buttons. -->
+<component name="RFHero" extends="Group">
+  <children>
+    <Rectangle id="base" width="1920" height="1080" color="#17202A" />
+    <Poster id="artA" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0" />
+    <Poster id="artB" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0" />
+    <Poster uri="pkg:/images/rf/rf-fade-left.png" width="1380" height="1080" loadDisplayMode="scaleToFill" />
+    <Poster uri="pkg:/images/rf/rf-fade-bottom.png" width="1920" height="700" translation="[0, 380]" loadDisplayMode="scaleToFill" />
+    <LayoutGroup id="info" translation="[96, 230]" layoutDirection="vert" itemSpacings="[18, 22, 34]">
+      <Group id="titleBox">
+        <Poster id="logo" width="640" height="200" loadDisplayMode="scaleToFit" visible="false" />
+        <Label id="title" width="1100" wrap="true" maxLines="2" lineSpacing="-8" />
+      </Group>
+      <Label id="meta" width="1100" />
+      <Label id="overview" width="980" wrap="true" maxLines="3" lineSpacing="4" />
+      <LayoutGroup id="buttons" layoutDirection="horiz" itemSpacings="[18]">
+        <RFButton id="playButton" iconUri="pkg:/images/rf/rf-play.png" />
+        <RFButton id="infoButton" iconUri="pkg:/images/rf/rf-info.png" />
+      </LayoutGroup>
+    </LayoutGroup>
+    <Group id="dots" translation="[1700, 652]" />
+    <Animation id="fade" duration="0.7" repeat="false" easeFunction="linear">
+      <FloatFieldInterpolator id="fadeIn" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="artA.opacity" />
+      <FloatFieldInterpolator id="fadeOut" key="[0.0, 1.0]" keyValue="[1.0, 0.0]" fieldToInterp="artB.opacity" />
+    </Animation>
+  </children>
+  <interface>
+    <!-- { title, logoUrl, backdropUrl, meta, overview } -->
+    <field id="item" type="assocarray" onChange="showItem" />
+    <field id="showButtons" type="boolean" value="true" onChange="onMode" />
+    <!-- 0 = Play, 1 = More info, -1 = neither (focus is elsewhere) -->
+    <field id="buttonFocus" type="integer" value="-1" onChange="onButtonFocus" />
+    <field id="dotCount" type="integer" value="0" onChange="drawDots" />
+    <field id="dotIndex" type="integer" value="0" onChange="drawDots" />
+  </interface>
+</component>

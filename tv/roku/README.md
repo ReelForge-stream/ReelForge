@@ -4,8 +4,11 @@ The ReelForge app for Roku TVs and streaming sticks. It's built on the open-sour
 [Jellyfin app for Roku](https://github.com/jellyfin/jellyfin-roku) (GPL-2.0, see `LICENSE`), with the
 ReelForge look and these additions:
 
-- **Featured row** at the top of Home. It rotates through 15 unwatched movies and shows every 9 seconds while
-  you're on it, with the title's artwork filling the screen. You can turn it off in Settings › User Interface › Home Rows.
+- **The ReelForge look**, like the web app: a top menu (Home, Movies, TV Shows, My List, Search, Settings), a big
+  billboard on Home with **Play** and **More Info**, wide picture cards with the title on them, ReelForge fonts and
+  colors, and restyled movie, show and library pages. The player, settings and music screens are unchanged.
+- **Billboard** at the top of Home. It rotates through new and unwatched movies and shows every 9 seconds. When you
+  move down to the rows, it shows whatever you're on. You can turn it off in Settings › User Interface › Home Rows.
 - **IMDb and Rotten Tomatoes scores** on movie and show pages, from the ReelForge server (IMDb scores need the OMDb key
   in the ReelForge web app under Settings › General).
 - **Sign in with a QR code.** The sign-in screen shows a QR code. Scan it with your phone's camera, tap
@@ -40,7 +43,16 @@ It stays installed, also after restarts, until you replace it with another one.
      to be on the home Wi-Fi.
    - Codes renew by themselves every 9 minutes, or press **New QR code**.
 
-**Updating:** repeat step 3 with the newer .zip (it replaces the old one).
+**Updating by itself (recommended):** in the ReelForge web app, open **Media Manager › TVs**. Each TV shows up there
+after ReelForge opens on it once. Click **Turn on automatic updates** and enter that TV's developer password (the one
+from step 2). From then on, whenever your server gets a new ReelForge version, the server installs the matching app
+on the TV the next time the app opens there (the app closes and reopens by itself), or right away with **Update now**.
+- The server and the TV need to be on the same home network.
+- The password is checked against the TV, stored encrypted on the server, and only sent to that same Roku (the
+  server checks its serial number first).
+- If you turn developer mode off and on again, the password changes: save the new one.
+
+**Updating by hand:** repeat step 3 with the newer .zip (it replaces the old one).
 
 **Several TVs:** repeat for each Roku. Each one needs developer mode turned on once.
 

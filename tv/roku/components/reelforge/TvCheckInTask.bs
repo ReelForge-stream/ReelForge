@@ -1,0 +1,48 @@
+import "pkg:/source/api/baserequest.bs"
+import "pkg:/source/utils/config.bs"
+
+sub init()
+    m.top.functionName = "checkIn"
+end sub
+
+' POST /ReelForge/Tv/CheckIn { DeviceId, Name, Model, Ip, AppVersion } → { ServerVersion, UpdateAvailable, AutoUpdate, Updating }
+' If this TV is behind and an admin saved its developer password, the server installs the new version on it now,
+' which closes and reopens the app. Servers without this feature answer 404 and nothing happens.
+sub checkIn()
+    device = CreateObject("roDeviceInfo")
+    ip = ""
+    addrs = device.GetIPAddrs()
+    if type(addrs) = "roAssociativeArray"
+        for each key in addrs
+            if ip = "" then ip = addrs[key]
+        end for
+    end if
+
+    body = {
+        DeviceId: device.GetChannelClientId(),
+        Name: device.GetFriendlyName(),
+        Model: device.GetModelDisplayName(),
+        Ip: ip,
+        AppVersion: CreateObject("roAppInfo").GetVersion()
+    }
+    req = APIRequest("ReelForge/Tv/CheckIn")
+    if req = invalid then return
+    resp = postJson(req, FormatJson(body))
+    if type(resp) <> "roAssociativeArray" then return
+    m.top.result = resp
+
+    version = resp.LookupCI("ServerVersion") ?? ""
+    if resp.LookupCI("Updating") = true
+        m.global.sceneManager.callFunc("standardDialog", tr("Updating ReelForge"), {
+            data: ["<p>" + tr("ReelForge %1 is being installed on this TV. The app will close and open again by itself in a moment.").Replace("%1", version) + "</p>"]
+        })
+    else if resp.LookupCI("UpdateAvailable") = true and resp.LookupCI("AutoUpdate") <> true
+        ' Tell each version once; an admin can switch on automatic updates in the web app
+        if get_setting("rfUpdateNotice") <> version
+            set_setting("rfUpdateNotice", version)
+            m.global.sceneManager.callFunc("standardDialog", tr("Update available"), {
+                data: ["<p>" + tr("ReelForge %1 is out for this TV. To have it install by itself, an admin can turn on updates in the ReelForge web app under Media Manager › TVs.").Replace("%1", version) + "</p>"]
+            })
+        end if
+    end if
+end sub

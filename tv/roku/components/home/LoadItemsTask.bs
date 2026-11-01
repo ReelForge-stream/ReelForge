@@ -39,7 +39,10 @@ function loadLibraries() as object
             name: item.LookupCI("name"),
             Type: item.LookupCI("Type"),
             CollectionType: item.LookupCI("CollectionType"),
-            UserData: item.LookupCI("UserData")
+            UserData: item.LookupCI("UserData"),
+            Overview: item.LookupCI("Overview"),
+            RunTimeTicks: item.LookupCI("RunTimeTicks"),
+            CommunityRating: item.LookupCI("CommunityRating")
         }
         json.Append(ItemImageFields(item))
         tmp.json = json
@@ -59,7 +62,7 @@ function loadLatestMedia() as object
         enableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}`,
         imageTypeLimit: 1,
         enableTotalRecordCount: false,
-        fields: "Genres"
+        fields: "Genres,Overview"
     }
 
     data = api.items.GetLatest(params)
@@ -94,6 +97,9 @@ function loadLatestMedia() as object
                 Genre: isValidAndNotEmpty(item.GenreItems) ? item.GenreItems : invalid,
                 Status: item.LookupCI("Status"),
                 UserData: item.LookupCI("UserData"),
+                Overview: item.LookupCI("Overview"),
+                RunTimeTicks: item.LookupCI("RunTimeTicks"),
+                CommunityRating: item.LookupCI("CommunityRating"),
                 LibraryId: m.top.itemId
             }
             json.Append(ItemImageFields(item))
@@ -115,6 +121,7 @@ function loadContinueWatching() as object
         Filters: "IsResumable",
         MediaTypes: ItemType.VIDEO,
         excludeItemTypes: ItemType.BOOK,
+        fields: "Overview",
         EnableTotalRecordCount: false
     }
     data = api.useritems.GetResumeItems(params)
@@ -141,7 +148,10 @@ function loadContinueWatching() as object
             IndexNumberEnd: item.LookupCI("IndexNumberEnd"),
             OfficialRating: item.LookupCI("OfficialRating"),
             CollectionType: item.LookupCI("CollectionType"),
-            UserData: item.LookupCI("UserData")
+            UserData: item.LookupCI("UserData"),
+            Overview: item.LookupCI("Overview"),
+            RunTimeTicks: item.LookupCI("RunTimeTicks"),
+            CommunityRating: item.LookupCI("CommunityRating")
         }
         json.Append(ItemImageFields(item))
         tmp.json = json
@@ -212,7 +222,10 @@ function loadContinueListening() as object
             IndexNumber: item.LookupCI("IndexNumber"),
             OfficialRating: item.LookupCI("OfficialRating"),
             CollectionType: item.LookupCI("CollectionType"),
-            UserData: item.LookupCI("UserData")
+            UserData: item.LookupCI("UserData"),
+            Overview: item.LookupCI("Overview"),
+            RunTimeTicks: item.LookupCI("RunTimeTicks"),
+            CommunityRating: item.LookupCI("CommunityRating")
         }
         json.Append(ItemImageFields(item))
         tmp.json = json
@@ -380,7 +393,10 @@ function loadLiveTVOnNow() as object
             IndexNumber: item.LookupCI("IndexNumber"),
             AlbumArtist: item.LookupCI("AlbumArtist"),
             Status: item.LookupCI("Status"),
-            UserData: item.LookupCI("UserData")
+            UserData: item.LookupCI("UserData"),
+            Overview: item.LookupCI("Overview"),
+            RunTimeTicks: item.LookupCI("RunTimeTicks"),
+            CommunityRating: item.LookupCI("CommunityRating")
         }
         json.Append(ItemImageFields(item))
         tmp.json = json
@@ -401,6 +417,7 @@ function loadNextUp() as object
         UserId: m.global.session.user.id,
         EnableRewatching: m.global.session.user.settings["ui.details.enablerewatchingnextup"],
         DisableFirstEpisode: false,
+        Fields: "Overview",
         limit: 26,
         EnableTotalRecordCount: false
     }
@@ -508,7 +525,10 @@ function createFavoriteHomeData(item as object) as object
         AlbumArtist: item.LookupCI("AlbumArtist"),
         ChildCount: item.LookupCI("ChildCount"),
         CollectionType: item.LookupCI("CollectionType"),
-        UserData: item.LookupCI("UserData")
+        UserData: item.LookupCI("UserData"),
+        Overview: item.LookupCI("Overview"),
+        RunTimeTicks: item.LookupCI("RunTimeTicks"),
+        CommunityRating: item.LookupCI("CommunityRating")
     }
     json.Append(ItemImageFields(item))
     tmp.json = json
@@ -620,44 +640,61 @@ end function
 ' ReelForge: 15 random unwatched movies and shows that have backdrop art, for the Featured row at the top of Home.
 function loadFeatured() as object
     results = []
-
-    data = api.items.Get({
+    seen = {}
+    common = {
         UserId: m.global.session.user.id,
         Recursive: true,
         IncludeItemTypes: "Movie,Series",
-        IsPlayed: false,
         ImageTypes: ImageType.BACKDROP,
-        SortBy: "Random",
-        Fields: "Overview",
+        Fields: "Overview,Genres",
         ImageTypeLimit: 1,
         EnableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}, ${ImageType.LOGO}`,
-        Limit: 15,
         EnableTotalRecordCount: false
-    })
+    }
+    newest = {}
+    newest.Append(common)
+    newest.Append({ SortBy: "DateCreated", SortOrder: "Descending", Limit: 6 })
+    spread = {}
+    spread.Append(common)
+    spread.Append({ SortBy: "Random", IsPlayed: false, Limit: 18 })
 
-    if not isChainValid(data, "Items") then return results
-
-    for each item in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
-        tmp.posterURL = ItemImageURL(item, ImageType.PRIMARY, imageSizes.HOME_TILE)
-        json = {
-            Id: item.LookupCI("Id"),
-            name: item.LookupCI("name"),
-            Type: item.LookupCI("Type"),
-            ProductionYear: item.LookupCI("ProductionYear"),
-            Status: item.LookupCI("Status"),
-            EndDate: item.LookupCI("EndDate"),
-            OfficialRating: item.LookupCI("OfficialRating"),
-            Overview: item.LookupCI("Overview"),
-            UserData: item.LookupCI("UserData"),
-            ReelForgeBackdrop: ItemImageURL(item, ImageType.BACKDROP, { "maxWidth": 1920, "quality": 80 })
-        }
-        json.Append(ItemImageFields(item))
-        tmp.json = json
-        results.push(tmp)
+    for each query in [newest, spread]
+        data = api.items.Get(query)
+        if isChainValid(data, "Items")
+            for each item in data.Items
+                id = item.LookupCI("Id")
+                if isValid(id) and not seen.DoesExist(id) and results.count() < 20
+                    seen[id] = true
+                    results.push(featuredHomeData(item))
+                end if
+            end for
+        end if
     end for
-
     return results
+end function
+
+function featuredHomeData(item as object) as object
+    tmp = CreateObject("roSGNode", "HomeData")
+    tmp.posterURL = ItemImageURL(item, ImageType.PRIMARY, imageSizes.HOME_TILE)
+    genres = item.LookupCI("Genres")
+    json = {
+        Id: item.LookupCI("Id"),
+        name: item.LookupCI("name"),
+        Type: item.LookupCI("Type"),
+        ProductionYear: item.LookupCI("ProductionYear"),
+        Status: item.LookupCI("Status"),
+        EndDate: item.LookupCI("EndDate"),
+        OfficialRating: item.LookupCI("OfficialRating"),
+        Overview: item.LookupCI("Overview"),
+        RunTimeTicks: item.LookupCI("RunTimeTicks"),
+        CommunityRating: item.LookupCI("CommunityRating"),
+        Genres: genres,
+        ChildCount: item.LookupCI("ChildCount"),
+        UserData: item.LookupCI("UserData")
+    }
+    json.Append(ItemImageFields(item))
+    tmp.json = json
+    return tmp
 end function
 
 function loadMyList() as object
@@ -689,7 +726,8 @@ function loadMyList() as object
     myListData = api.items.Get({
         UserId: m.global.session.user.id,
         ImageTypeLimit: 1,
-        EnableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}`,
+        EnableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}, ${ImageType.LOGO}`,
+        Fields: "Overview",
         Limit: 50,
         EnableTotalRecordCount: false,
         ParentId: playlistID
@@ -719,7 +757,10 @@ function loadMyList() as object
             IndexNumber: item.LookupCI("IndexNumber"),
             OfficialRating: item.LookupCI("OfficialRating"),
             CollectionType: item.LookupCI("CollectionType"),
-            UserData: item.LookupCI("UserData")
+            UserData: item.LookupCI("UserData"),
+            Overview: item.LookupCI("Overview"),
+            RunTimeTicks: item.LookupCI("RunTimeTicks"),
+            CommunityRating: item.LookupCI("CommunityRating")
         }
         json.Append(ItemImageFields(item))
         tmp.json = json

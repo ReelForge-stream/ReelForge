@@ -1,57 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge Home: full-screen billboard, top bar, and rows of 16:9 cards (like the web app). -->
 <component name="Home" extends="JFScreen">
   <children>
-    <Poster id="backdrop" loadDisplayMode="scaleToZoom" width="1920" height="1200" />
-    <!-- ReelForge: the Featured title's art fills the screen behind Home, under a dark wash so rows stay readable -->
-    <Poster id="featuredBackdrop" loadDisplayMode="scaleToZoom" width="1920" height="1080" opacity="0" />
-    <Rectangle id="featuredWash" width="1920" height="1080" color="0x17202AFF" opacity="0" />
-    <Animation id="featuredFade" duration="0.6" repeat="false" easeFunction="linear">
-      <FloatFieldInterpolator id="featuredFadeArt" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="featuredBackdrop.opacity" />
-    </Animation>
-
-    <LayoutGroup id="buttons" translation="[100, 100]" layoutDirection="horiz" horizAlignment="left" itemSpacings="[25]">
-      <TextButton
-        id="searchButton"
-        iconSide="left"
-        fontSize="25"
-        padding="20"
-        icon="pkg:/images/icons/search-light.png"
-        focusIcon="pkg:/images/icons/search-light.png"
-        text="Search"
-        height="50"
-        width="200" />
-      <TextButton
-        id="settingsButton"
-        iconSide="left"
-        fontSize="25"
-        padding="20"
-        icon="pkg:/images/icons/settings.png"
-        focusIcon="pkg:/images/icons/settings.png"
-        text="Settings"
-        height="50"
-        width="200" />
-    </LayoutGroup>
-
+    <RFHero id="hero" />
     <HomeRows
       id="homeRows"
       showRowLabel="true"
       vertFocusAnimationStyle="fixedFocus"
       rowFocusAnimationStyle="fixedFocusWrap"
       itemComponentName="HomeItem"
-      numRows="2"
-      rowLabelOffset="[[0,20]]" />
+      numRows="3" />
+    <RFTopBar id="topBar" active="home" />
+    <!-- takes key focus while the billboard buttons are active (keys bubble up to Home) -->
+    <Group id="heroFocus" focusable="true" />
     <OptionsSlider id="options" />
-
-    <Animation id="toggleButtonsAnimation" duration=".7" repeat="false" easeFunction="linear">
-      <FloatFieldInterpolator id="buttonsFade" key="[0.0, .6]" keyValue="[1.00, 0.00]" fieldToInterp="buttons.opacity" />
-      <Vector2DFieldInterpolator id="buttonsMove" key="[0.1, .9]" keyValue="[[100, 100], [100, 0]]" fieldToInterp="buttons.translation" />
-    </Animation>
-
+    <Timer id="rotateTimer" duration="9" repeat="true" />
   </children>
   <interface>
     <field id="playlistData" type="array" />
     <field id="selectedItem" alias="homeRows.selectedItem" />
-    <field id="rowFocused" alias="homeRows.itemFocused" onchange="onRowFocusedChange" />
+    <field id="rowFocused" alias="homeRows.itemFocused" />
     <field id="quickPlayNode" alias="homeRows.quickPlayNode" />
     <function name="refresh" />
     <function name="loadLibraries" />

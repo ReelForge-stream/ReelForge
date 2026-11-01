@@ -93,6 +93,7 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<SavingsLedger>();
         serviceCollection.AddSingleton<AgentRegistry>();
         serviceCollection.AddSingleton<RatingsService>();
+        serviceCollection.AddSingleton<TvUpdater>();
         serviceCollection.AddSingleton<ConversionQueue>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<ConversionQueue>());
         serviceCollection.AddSingleton<NetworkShares>();

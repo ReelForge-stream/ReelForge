@@ -4,6 +4,7 @@ import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/enums/TaskControl.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
 
 const LOADING_WAIT_TIME = 2
 
@@ -63,21 +64,18 @@ sub loadLibraries()
 end sub
 
 sub updateSize()
-    m.top.translation = [111, 180]
-    itemHeight = 330
-
-    'Set width of Rows to cut off at edge of Safe Zone
-    m.top.itemSize = [1703, itemHeight]
-
-    ' spacing between rows
-    m.top.itemSpacing = [0, 105]
-
-    ' spacing between items in a row
-    m.top.rowItemSpacing = [20, 0]
-
-    ' Default size to wide poster, the most used size
+    ' ReelForge layout: rows sit under the billboard; the focused row stays at the same height
+    ' (fixed focus) so the billboard above can show whatever is highlighted.
+    m.top.translation = [96, 704]
+    m.top.itemSize = [1824, 236]
+    m.top.itemSpacing = [0, 70]
+    m.top.rowItemSpacing = [[24, 0]]
     m.top.rowItemSize = homeRowItemSizes.WIDE_POSTER
-
+    m.top.rowLabelOffset = [[0, 16]]
+    m.top.rowLabelFont = rfFont("display", 34)
+    m.top.rowLabelColor = rfColor.TEXT
+    m.top.focusBitmapUri = "pkg:/images/rf/rf-ring.9.png"
+    m.top.drawFocusFeedbackOnTop = true
     m.top.visible = true
 end sub
 
@@ -157,6 +155,7 @@ end sub
 sub onLibrariesLoaded()
     ' save data for other functions
     m.libraryData = m.LoadLibrariesTask.content
+    m.top.libraries = m.libraryData
     m.LoadLibrariesTask.unobserveField("content")
     m.LoadLibrariesTask.content = []
 
@@ -201,9 +200,6 @@ function getOriginalSectionIndex(sectionName as string) as integer
             end if
         end for
     end if
-
-    ' ReelForge: the Featured row sits above every user section
-    if sectionExists(featuredTitle()) then sectionIndex++
 
     return sectionIndex
 end function
@@ -252,10 +248,7 @@ end sub
 ' loadingTimerComplete: Event handler for when loading wait time has expired
 '
 sub loadingTimerComplete()
-    if not m.top.showRowCounter[0]
-        ' Show the row counter to prevent flicker
-        m.top.showRowCounter = [true]
-    end if
+    ' ReelForge: no "1 of 3" counters on rows
 end sub
 
 ' addHomeSection: Adds a new home section to the home rows.
@@ -603,21 +596,14 @@ sub createMyListRow()
     m.LoadMyListTask.control = "RUN"
 end sub
 
-' ReelForge: createFeaturedRow puts a placeholder at the top, then fills it once per app start.
-' It isn't one of the counted user sections, so it doesn't touch the loading bookkeeping.
+' ReelForge: picks the billboard's titles once per app start (Home shows them; they're no longer a row).
 sub createFeaturedRow()
     if not featuredRowWanted()
-        removeHomeSection(featuredTitle())
+        m.top.featured = []
         return
     end if
-    if sectionExists(featuredTitle()) then return
-
-    row = CreateObject("roSGNode", "HomeRow")
-    row.title = featuredTitle()
-    row.imageWidth = homeRowItemSizes.WIDE_POSTER[0]
-    row.cursorSize = homeRowItemSizes.WIDE_POSTER
-    m.top.content.insertChild(row, 0)
-
+    if m.featuredRequested = true then return
+    m.featuredRequested = true
     m.LoadFeaturedTask.observeField("content", "updateFeaturedItems")
     m.LoadFeaturedTask.control = TaskControl.RUN
 end sub
@@ -637,25 +623,8 @@ sub updateFeaturedItems()
     itemData = m.LoadFeaturedTask.content
     m.LoadFeaturedTask.unobserveField("content")
     m.LoadFeaturedTask.content = []
-
-    if not isValidAndNotEmpty(itemData)
-        removeHomeSection(featuredTitle())
-        setRowItemSize()
-        return
-    end if
-
-    row = CreateObject("roSGNode", "HomeRow")
-    row.title = featuredTitle()
-    row.imageWidth = homeRowItemSizes.WIDE_POSTER[0]
-    row.cursorSize = homeRowItemSizes.WIDE_POSTER
-    for each item in itemData
-        item.usePoster = false
-        item.imageWidth = row.imageWidth
-        row.appendChild(item)
-    end for
-
-    m.top.content.replaceChild(row, getSectionIndex(featuredTitle()))
-    setRowItemSize()
+    if not isValid(itemData) then itemData = []
+    m.top.featured = itemData
 end sub
 
 ' createFavoritesRow: Creates a row displaying items from the user's favorites list

@@ -1,0 +1,122 @@
+import "pkg:/source/utils/rfTheme.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.artA = m.top.findNode("artA")
+    m.artB = m.top.findNode("artB")
+    m.fade = m.top.findNode("fade")
+    m.fadeIn = m.top.findNode("fadeIn")
+    m.fadeOut = m.top.findNode("fadeOut")
+    m.front = m.artA ' the picture currently shown
+    m.logo = m.top.findNode("logo")
+    m.logo.observeField("loadStatus", "onLogoLoaded")
+    m.title = m.top.findNode("title")
+    m.title.font = rfFont("displayBold", 92)
+    m.title.color = rfColor.TEXT
+    m.meta = m.top.findNode("meta")
+    m.meta.font = rfFont("textMedium", 30)
+    m.meta.color = "#C9D3DD"
+    m.overview = m.top.findNode("overview")
+    m.overview.font = rfFont("text", 30)
+    m.overview.color = rfColor.TEXT
+    m.buttons = m.top.findNode("buttons")
+    m.play = m.top.findNode("playButton")
+    m.play.text = tr("Play")
+    m.play.width = 220
+    m.info = m.top.findNode("infoButton")
+    m.info.text = tr("More Info")
+    m.info.width = 290
+    m.dots = m.top.findNode("dots")
+    onMode()
+end sub
+
+sub showItem()
+    item = m.top.item
+    if not isValid(item) then return
+
+    ' Name: the title's logo artwork when it has one, else the name in large type
+    if isValidAndNotEmpty(item.logoUrl)
+        m.logo.uri = item.logoUrl
+        m.title.visible = false
+    else
+        m.logo.visible = false
+        m.logo.uri = ""
+        m.title.text = item.title
+        m.title.visible = true
+    end if
+    m.meta.text = item.meta
+    m.overview.text = item.overview
+    m.overview.visible = isValidAndNotEmpty(item.overview)
+
+    ' Cross-fade to the new picture
+    art = item.backdropUrl
+    if not isValidAndNotEmpty(art) then art = ""
+    if m.front.uri = art then return
+    back = m.artB
+    if m.front.isSameNode(m.artB) then back = m.artA
+    back.uri = art
+    m.fade.control = "stop"
+    m.fadeIn.fieldToInterp = back.id + ".opacity"
+    m.fadeOut.fieldToInterp = m.front.id + ".opacity"
+    m.fadeOut.keyValue = [m.front.opacity, 0.0]
+    m.fade.control = "start"
+    m.front = back
+end sub
+
+' Logos come in all shapes: fit within 640x200 but keep them left-aligned with the text.
+sub onLogoLoaded()
+    if m.logo.loadStatus = "ready"
+        bw = m.logo.bitmapWidth
+        bh = m.logo.bitmapHeight
+        if bw > 0 and bh > 0
+            scale = 200.0 / bh
+            if bw * scale > 640 then scale = 640.0 / bw
+            m.logo.width = int(bw * scale)
+            m.logo.height = int(bh * scale)
+        end if
+        m.logo.visible = true
+        m.title.visible = false
+    else if m.logo.loadStatus = "failed"
+        m.logo.visible = false
+        m.title.text = chainLookupReturn(m.top, "item.title", "")
+        m.title.visible = true
+    end if
+end sub
+
+sub onMode()
+    m.buttons.visible = m.top.showButtons
+    m.dots.visible = m.top.showButtons
+    m.overview.maxLines = 2
+    if not m.top.showButtons then m.overview.maxLines = 3
+end sub
+
+sub onButtonFocus()
+    m.play.highlighted = m.top.buttonFocus = 0
+    m.info.highlighted = m.top.buttonFocus = 1
+end sub
+
+sub drawDots()
+    n = m.top.dotCount
+    while m.dots.getChildCount() > n
+        m.dots.removeChildIndex(m.dots.getChildCount() - 1)
+    end while
+    while m.dots.getChildCount() < n
+        d = m.dots.createChild("Rectangle")
+        d.height = 5
+    end while
+    x = 0
+    for i = 0 to n - 1
+        d = m.dots.getChild(i)
+        if i = m.top.dotIndex
+            d.width = 34
+            d.color = rfColor.TEXT
+        else
+            d.width = 18
+            d.color = "#55616D"
+        end if
+        d.translation = [x, 0]
+        x = x + d.width + 6
+    end for
+    ' Right-aligned above the rows, like the web app
+    m.dots.translation = [1824 - x + 8, 652]
+end sub

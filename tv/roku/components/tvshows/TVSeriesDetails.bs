@@ -6,6 +6,9 @@ import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/enums/ViewLoadStatus.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
+import "pkg:/source/api/Image.bs"
+import "pkg:/source/enums/ImageType.bs"
 
 sub init()
     m.top.optionsAvailable = false
@@ -22,7 +25,8 @@ sub init()
     m.loadStatus = ViewLoadStatus.INIT
 
     seasonListRect = m.top.FindNode("seasonListRect")
-    seasonListRect.color = ColorPalette.BLACK77
+    seasonListRect.color = rfColor.DEEP
+    seasonListRect.opacity = 0.92
     m.defaultClippingRect = "[-10,-10,2020,370]"
 
     m.toplevel = m.top.findnode("toplevel")
@@ -60,6 +64,51 @@ sub init()
     m.top.selectedButtonIndex = 0
 
     setFontSizes()
+    rfStyle()
+end sub
+
+' ReelForge: the web app's fonts and colors, and the show's picture behind the page
+sub rfStyle()
+    title = m.top.findNode("title")
+    title.font = rfFont("displayBold", 64)
+    title.height = 84
+    title.color = rfColor.TEXT
+    for each id in ["runtime", "numberofepisodes", "released", "rating", "communityReview", "imdbRating", "tomatoRating", "history", "genres"]
+        node = m.top.findNode(id)
+        if isValid(node)
+            node.font = rfFont("textMedium", 26)
+            node.color = rfColor.TEXT
+        end if
+    end for
+    m.overview.font = rfFont("text", 28)
+    m.overview.color = rfColor.TEXT
+    m.overview.lineSpacing = 10
+    m.seasons.focusBitmapUri = "pkg:/images/rf/rf-ring.9.png"
+    m.seasons.focusBitmapBlendColor = rfColor.EMBER
+
+    background = createObject("roSGNode", "Rectangle")
+    background.width = 1920
+    background.height = 1080
+    background.color = rfColor.BASE
+    m.top.insertChild(background, 0)
+    m.backdrop = createObject("roSGNode", "Poster")
+    m.backdrop.width = 1920
+    m.backdrop.height = 1080
+    m.backdrop.loadDisplayMode = "scaleToZoom"
+    m.top.insertChild(m.backdrop, 1)
+    fadeLeft = createObject("roSGNode", "Poster")
+    fadeLeft.uri = "pkg:/images/rf/rf-fade-left.png"
+    fadeLeft.width = 1500
+    fadeLeft.height = 1080
+    fadeLeft.loadDisplayMode = "scaleToFill"
+    m.top.insertChild(fadeLeft, 2)
+    fadeBottom = createObject("roSGNode", "Poster")
+    fadeBottom.uri = "pkg:/images/rf/rf-fade-bottom.png"
+    fadeBottom.width = 1920
+    fadeBottom.height = 760
+    fadeBottom.translation = [0, 320]
+    fadeBottom.loadDisplayMode = "scaleToFill"
+    m.top.insertChild(fadeBottom, 3)
 end sub
 
 sub onDisplayResumeButtonChange()
@@ -82,7 +131,7 @@ sub onDisplayResumeButtonChange()
         m.resume = createObject("roSGNode", "IconButton")
         m.resume.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
         m.resume.id = "resume"
-        m.resume.background = "#070707"
+        m.resume.background = "#2B3846"
         m.resume.padding = "35"
         m.resume.icon = "pkg:/images/icons/resume.png"
         m.resume.text = "Resume"
@@ -188,6 +237,9 @@ sub itemContentChanged()
     }
 
     setFieldText("title", itemData.name)
+    if isValidAndNotEmpty(itemData.BackdropImageTags)
+        m.backdrop.uri = ImageURL(itemData.id, ImageType.BACKDROP, { "maxWidth": 1920, "Tag": itemData.BackdropImageTags[0] })
+    end if
 
     if type(itemData.RunTimeTicks) = "LongInteger"
         setFieldText("runtime", stri(getRuntime()) + " mins")

@@ -5,6 +5,7 @@ import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/enums/SearchButtonState.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
 
 sub init()
     m.searchButtonDisabled = false
@@ -38,28 +39,41 @@ sub init()
     end if
 
     m.sortButton = m.top.findNode("sortButton")
-    m.sortButton.textColor = ColorPalette.DARKGREY
+    m.sortButton.textColor = rfColor.TEXT
     m.sortButton.focusTextColor = ColorPalette.WHITE
-    m.sortButton.background = ColorPalette.WHITE
+    m.sortButton.background = rfColor.SURFACE2
+    m.sortButton.icon = "pkg:/images/icons/dropdown-light.png"
     m.sortButton.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
 
     m.sortOrderButton = m.top.findNode("sortOrderButton")
-    m.sortOrderButton.textColor = ColorPalette.DARKGREY
+    m.sortOrderButton.textColor = rfColor.TEXT
     m.sortOrderButton.focusTextColor = ColorPalette.WHITE
-    m.sortOrderButton.background = ColorPalette.WHITE
+    m.sortOrderButton.background = rfColor.SURFACE2
+    m.sortOrderButton.icon = "pkg:/images/icons/dropdown-light.png"
     m.sortOrderButton.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
 
     m.filterButton = m.top.findNode("filterButton")
-    m.filterButton.textColor = ColorPalette.DARKGREY
+    m.filterButton.textColor = rfColor.TEXT
     m.filterButton.focusTextColor = ColorPalette.WHITE
-    m.filterButton.background = ColorPalette.WHITE
+    m.filterButton.background = rfColor.SURFACE2
+    m.filterButton.icon = "pkg:/images/icons/dropdown-light.png"
     m.filterButton.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
 
     m.viewButton = m.top.findNode("viewButton")
-    m.viewButton.textColor = ColorPalette.DARKGREY
+    m.viewButton.textColor = rfColor.TEXT
     m.viewButton.focusTextColor = ColorPalette.WHITE
-    m.viewButton.background = ColorPalette.WHITE
+    m.viewButton.background = rfColor.SURFACE2
+    m.viewButton.icon = "pkg:/images/icons/dropdown-light.png"
     m.viewButton.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+
+    ' ReelForge: quiet labels over dark controls, like the web app's filter bar
+    for each id in ["searchLabel", "sortLabel", "sortOrderLabel", "filterLabel", "viewLabel"]
+        label = m.top.findNode(id)
+        if isValid(label)
+            label.font = rfFont("textMedium", 24)
+            label.color = rfColor.MUTED
+        end if
+    end for
 
     setSearchBackground(SearchButtonState.INACTIVE)
 end sub
@@ -70,14 +84,9 @@ sub onMicIconBlendColorChange()
     ' LIGHTGREY: -1431655681
     ' HIGHLIGHT: -9934849
 
-    if m.voiceBoxBackground.blendColor = -9934849
-        if m.micIcon.blendColor <> -1
-            m.micIcon.blendColor = ColorPalette.WHITE
-        end if
-    else
-        if m.micIcon.blendColor <> 269488383
-            m.micIcon.blendColor = ColorPalette.DARKGREY
-        end if
+    ' The keyboard box recolors its mic icon itself; keep it readable on our background
+    if m.micIcon.blendColor <> -1
+        m.micIcon.blendColor = ColorPalette.WHITE
     end if
 end sub
 
@@ -178,15 +187,15 @@ sub setSearchBackground(state)
     end if
 
     if state = SearchButtonState.DISABLED
-        m.voiceBox.textColor = ColorPalette.DARKGREY
-        m.voiceBox.hintTextColor = ColorPalette.DARKGREY
-        m.voiceBoxBackground.blendColor = ColorPalette.MIDGREY
+        m.voiceBox.textColor = rfColor.MUTED
+        m.voiceBox.hintTextColor = rfColor.MUTED
+        m.voiceBoxBackground.blendColor = rfColor.DEEP
         return
     end if
 
-    m.voiceBox.textColor = ColorPalette.MIDGREY
-    m.voiceBox.hintTextColor = ColorPalette.MIDGREY
-    m.voiceBoxBackground.blendColor = ColorPalette.WHITE
+    m.voiceBox.textColor = rfColor.TEXT
+    m.voiceBox.hintTextColor = rfColor.MUTED
+    m.voiceBoxBackground.blendColor = rfColor.SURFACE2
 end sub
 
 sub setOptionData(optionData)

@@ -3,6 +3,7 @@ import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/enums/String.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
 
 const blankUserAvatarUri = "pkg:/images/baseline_person_white_48dp.png"
 
@@ -244,6 +245,12 @@ sub initQrSignIn()
     m.qrImage.observeField("loadStatus", "onQrImageStatus")
     ' A password sign-in stops phone sign-in, so the two can't both log in at once
     m.submit.observeField("selected", "onPasswordSubmit")
+    ' ReelForge fonts
+    m.qrCode.font = rfFont("displayBold", 76)
+    m.top.findNode("signInTitle").font = rfFont("displayBold", 64)
+    m.top.findNode("qrTitle").font = rfFont("display", 38)
+    m.top.findNode("passwordTitle").font = rfFont("display", 38)
+    m.qrHelp.font = rfFont("text", 26)
     m.qrSecret = ""
     m.qrActive = false ' true only while this screen is showing (OnScreenShown starts the first code)
 end sub

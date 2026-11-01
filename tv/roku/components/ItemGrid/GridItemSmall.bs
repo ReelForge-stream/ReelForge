@@ -2,14 +2,18 @@ import "pkg:/source/enums/ImageLayout.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
 
 sub init()
     m.itemPoster = m.top.findNode("itemPoster")
     m.itemIcon = m.top.findNode("itemIcon")
     m.posterText = m.top.findNode("posterText")
     m.title = m.top.findNode("title")
-    m.posterText.font.size = 30
-    m.title.font.size = 25
+    ' ReelForge fonts
+    m.posterText.font = rfFont("display", 30)
+    m.posterText.color = rfColor.TEXT
+    m.title.font = rfFont("textMedium", 24)
+    m.title.color = rfColor.TEXT
     m.backdrop = m.top.findNode("backdrop")
     m.playedIndicator = m.top.findNode("playedIndicator")
 
@@ -54,7 +58,7 @@ sub onWidthChanged()
 end sub
 
 sub itemContentChanged()
-    m.backdrop.blendColor = "#101010"
+    m.backdrop.blendColor = rfColor.SURFACE
 
     m.title.visible = false
 

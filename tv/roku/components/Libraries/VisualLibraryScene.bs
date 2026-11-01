@@ -15,6 +15,7 @@ import "pkg:/source/enums/TaskControl.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
 
 const ASPECT_RATIO_PORTRAIT_NO_TITLE = 1.52173
 const ASPECT_RATIO_LANDSCAPE_NO_TITLE = .56307
@@ -174,6 +175,29 @@ sub init()
     'set inital counts for overhang before content is loaded.
     m.loadItemsTask.observeField("content", "ItemDataLoaded")
     m.loadItemsTask.totalRecordCount = 0
+    rfStyle()
+end sub
+
+' ReelForge: the web app's fonts and colors for the browse page
+sub rfStyle()
+    name = m.top.findNode("selectedItemName")
+    name.font = rfFont("displayBold", 68)
+    name.color = rfColor.TEXT
+    for each id in ["selectedItemProductionYear", "runtime", "communityRating", "criticRatingLabel"]
+        node = m.top.findNode(id)
+        node.font = rfFont("textMedium", 26)
+        node.color = rfColor.TEXT
+    end for
+    rating = m.top.findNode("selectedItemOfficialRating")
+    rating.font = rfFont("textSemi", 24)
+    rating.color = rfColor.MUTED
+    overview = m.top.findNode("selectedItemOverview")
+    overview.font = rfFont("text", 28)
+    overview.color = rfColor.TEXT
+    overview.lineSpacing = 10
+    empty = m.top.findNode("emptyText")
+    empty.font = rfFont("display", 44)
+    empty.color = rfColor.MUTED
 end sub
 
 sub OnScreenHidden()

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge button: white when focused (like the web app's Play button), translucent grey otherwise. -->
+<component name="RFButton" extends="Group">
+  <children>
+    <Poster id="bg" uri="pkg:/images/rf/rf-round.9.png" height="76" />
+    <Poster id="icon" width="30" height="30" translation="[30, 23]" />
+    <Label id="label" height="76" vertAlign="center" translation="[76, 0]" />
+  </children>
+  <interface>
+    <field id="text" type="string" onChange="layout" />
+    <field id="iconUri" type="string" onChange="layout" />
+    <field id="width" type="integer" value="0" onChange="layout" />
+    <field id="height" type="integer" value="76" onChange="layout" />
+    <!-- set by the screen that owns it; the button itself never takes key focus -->
+    <field id="highlighted" type="boolean" value="false" onChange="restyle" />
+  </interface>
+</component>
