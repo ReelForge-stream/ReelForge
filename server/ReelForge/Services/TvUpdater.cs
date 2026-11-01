@@ -77,6 +77,7 @@ public sealed partial class TvUpdater
 
     internal static int EcpPort { get; set; } = 8060;
     private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _downloadGate = new(1, 1);
     private readonly ILogger<TvUpdater> _logger;
     private readonly string _path;
     private readonly string _dataDir;
@@ -167,8 +168,31 @@ public sealed partial class TvUpdater
         return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168);
     }
 
+    internal static bool SameAddress(string? a, string? b)
+    {
+        if (!IPAddress.TryParse(a, out var x) || !IPAddress.TryParse(b, out var y))
+        {
+            return false;
+        }
+
+        if (x.IsIPv4MappedToIPv6)
+        {
+            x = x.MapToIPv4();
+        }
+
+        if (y.IsIPv4MappedToIPv6)
+        {
+            y = y.MapToIPv4();
+        }
+
+        return x.Equals(y);
+    }
+
     /// <summary>The TV app opened: remember it and, if it's behind and we may, start updating it.</summary>
-    public TvCheckInResult CheckIn(string id, string? name, string? model, string? ip, string? appVersion, string? userName)
+    /// <param name="ip">The address the TV says it has.</param>
+    /// <param name="remoteIp">The address the request really came from. The TV's address is only taken when the two
+    /// match, so nobody can point a TV's saved password at another machine by checking in with a made-up address.</param>
+    public TvCheckInResult CheckIn(string id, string? name, string? model, string? ip, string? appVersion, string? userName, string? remoteIp)
     {
         if (!IdPattern().IsMatch(id ?? string.Empty))
         {
@@ -183,8 +207,18 @@ public sealed partial class TvUpdater
             tv = _tvs.FirstOrDefault(t => t.Id == id) ?? Add(id!);
             tv.Name = Clean(name, 60) ?? tv.Name;
             tv.Model = Clean(model, 40) ?? tv.Model;
-            if (IsHomeAddress(ip))
+            bool moved = false;
+            if (IsHomeAddress(ip) && SameAddress(ip, remoteIp) && tv.Ip != ip)
             {
+                if (tv.ProtectedPassword.Length > 0 && tv.Ip is not null)
+                {
+                    moved = true;
+                    // A new address could be a different device: the admin confirms it by saving the password again
+                    tv.ProtectedPassword = string.Empty;
+                    tv.Serial = null;
+                    SetStatus(tv, $"This TV moved from {tv.Ip} to {ip}. Save its password again to keep automatic updates.", true);
+                }
+
                 tv.Ip = ip;
             }
 
@@ -193,7 +227,7 @@ public sealed partial class TvUpdater
             tv.LastSeenUtc = DateTime.UtcNow;
 
             bool behind = IsOlder(tv.AppVersion, target);
-            if (!behind && tv.LastAttemptVersion == target && !tv.StatusIsError && !_busy.Contains(id!))
+            if (!behind && !moved && tv.LastAttemptVersion == target && !_busy.Contains(id!))
             {
                 SetStatus(tv, $"Up to date ({target})", false);
             }
@@ -237,7 +271,7 @@ public sealed partial class TvUpdater
 
         if (!IsHomeAddress(ip))
         {
-            return (false, "This TV hasn't reported its home-network address yet. Open ReelForge on the TV once, then try again.");
+            return (false, "This TV hasn't reported its home-network address yet. Open ReelForge on the TV once, then try again. (The TV needs to reach this server by its local address, e.g. http://192.168.1.10:8096, not through the internet.)");
         }
 
         string? serial = await ReadSerialAsync(ip!, ct).ConfigureAwait(false);
@@ -357,6 +391,19 @@ public sealed partial class TvUpdater
     /// <summary>The Roku app .zip for a version, downloaded once from the GitHub release and kept in the data folder.</summary>
     private async Task<string> GetPackageAsync(string version, CancellationToken ct)
     {
+        await _downloadGate.WaitAsync(ct).ConfigureAwait(false); // several TVs may update at once; download once
+        try
+        {
+            return await DownloadPackageAsync(version, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _downloadGate.Release();
+        }
+    }
+
+    private async Task<string> DownloadPackageAsync(string version, CancellationToken ct)
+    {
         string dir = Path.Combine(_dataDir, "roku");
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, $"ReelForge-Roku-{version}.zip");
@@ -365,7 +412,7 @@ public sealed partial class TvUpdater
             return path;
         }
 
-        foreach (var old in Directory.GetFiles(dir, "ReelForge-Roku-*.zip"))
+        foreach (var old in Directory.GetFiles(dir, "ReelForge-Roku-*"))
         {
             File.Delete(old); // only the current version is ever needed
         }
@@ -378,7 +425,7 @@ public sealed partial class TvUpdater
         }
 
         resp.EnsureSuccessStatusCode();
-        string tmp = path + ".part";
+        string tmp = $"{path}.{Guid.NewGuid():N}.part";
         await using (var fs = File.Create(tmp))
         {
             await resp.Content.CopyToAsync(fs, ct).ConfigureAwait(false);
@@ -403,10 +450,66 @@ public sealed partial class TvUpdater
         }
     }
 
-    private static HttpClient Installer(string ip, string password, TimeSpan timeout)
+    private static readonly HttpClient InstallerHttp = new() { Timeout = TimeSpan.FromMinutes(3) };
+
+    /// <summary>
+    /// Sends a request to the TV's developer installer with Digest auth (user rokudev). Done by hand so the zip
+    /// goes out exactly once, already signed: .NET's built-in Digest would send the whole upload, get a 401, and
+    /// send it again, and a Roku may close the connection on that first try.
+    /// </summary>
+    private static async Task<HttpResponseMessage> InstallerSendAsync(string ip, string password, HttpMethod method, HttpContent? content, CancellationToken ct)
     {
-        var creds = new CredentialCache { { new Uri($"http://{ip}:{InstallerPort}/"), "Digest", new NetworkCredential("rokudev", password) } };
-        return new HttpClient(new HttpClientHandler { Credentials = creds, PreAuthenticate = false }, disposeHandler: true) { Timeout = timeout };
+        string path = "/plugin_install";
+        string url = $"http://{ip}:{InstallerPort}{path}";
+        var first = await InstallerHttp.SendAsync(new HttpRequestMessage(HttpMethod.Get, url), ct).ConfigureAwait(false);
+        if (first.StatusCode != HttpStatusCode.Unauthorized)
+        {
+            if (method == HttpMethod.Get)
+            {
+                return first; // no password needed (not something a Roku does, but fine)
+            }
+
+            first.Dispose();
+            return await InstallerHttp.SendAsync(new HttpRequestMessage(method, url) { Content = content }, ct).ConfigureAwait(false);
+        }
+
+        string? challenge = first.Headers.WwwAuthenticate.FirstOrDefault(h => h.Scheme.Equals("Digest", StringComparison.OrdinalIgnoreCase))?.Parameter;
+        first.Dispose();
+        if (challenge is null)
+        {
+            throw new InvalidOperationException("the TV's installer didn't ask for a Digest password");
+        }
+
+        var req = new HttpRequestMessage(method, url) { Content = content };
+        req.Headers.TryAddWithoutValidation("Authorization", DigestHeader(challenge, method.Method, path, "rokudev", password, RandomNumberGenerator.GetHexString(16, lowercase: true)));
+        return await InstallerHttp.SendAsync(req, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The Authorization header answering a Digest challenge (RFC 7616, MD5, qop=auth when offered).</summary>
+    internal static string DigestHeader(string challenge, string method, string uri, string user, string password, string cnonce)
+    {
+        var p = Regex.Matches(challenge, @"(\w+)=(?:""([^""]*)""|([^,\s]+))")
+            .ToDictionary(m => m.Groups[1].Value.ToLowerInvariant(), m => m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value);
+        string realm = p.GetValueOrDefault("realm", string.Empty);
+        string nonce = p.GetValueOrDefault("nonce", string.Empty);
+        bool qop = p.TryGetValue("qop", out var q) && q.Split(',').Any(x => x.Trim() == "auth");
+        static string Md5(string s) => Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(s)));
+        string ha1 = Md5($"{user}:{realm}:{password}");
+        string ha2 = Md5($"{method}:{uri}");
+        const string nc = "00000001";
+        string response = qop ? Md5($"{ha1}:{nonce}:{nc}:{cnonce}:auth:{ha2}") : Md5($"{ha1}:{nonce}:{ha2}");
+        var h = new StringBuilder($"Digest username=\"{user}\", realm=\"{realm}\", nonce=\"{nonce}\", uri=\"{uri}\", response=\"{response}\"");
+        if (qop)
+        {
+            h.Append($", qop=auth, nc={nc}, cnonce=\"{cnonce}\"");
+        }
+
+        if (p.TryGetValue("opaque", out var opaque))
+        {
+            h.Append($", opaque=\"{opaque}\"");
+        }
+
+        return h.ToString();
     }
 
     /// <summary>Null when the password opens the TV's installer page, otherwise what's wrong in plain words.</summary>
@@ -414,8 +517,9 @@ public sealed partial class TvUpdater
     {
         try
         {
-            using var http = Installer(ip, password, TimeSpan.FromSeconds(8));
-            using var resp = await http.GetAsync($"http://{ip}:{InstallerPort}/plugin_install", ct).ConfigureAwait(false);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(8));
+            using var resp = await InstallerSendAsync(ip, password, HttpMethod.Get, null, cts.Token).ConfigureAwait(false);
             if (resp.StatusCode == HttpStatusCode.Unauthorized)
             {
                 return "The TV didn't accept that password. It's the one you set when you turned on developer mode (user rokudev).";
@@ -423,7 +527,7 @@ public sealed partial class TvUpdater
 
             return resp.IsSuccessStatusCode ? null : $"The TV's installer answered {(int)resp.StatusCode}. Is developer mode still on?";
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
             return "The TV's developer installer didn't answer. Turn developer mode on again (Home ×3, Up ×2, Right, Left, Right, Left, Right).";
         }
@@ -432,23 +536,12 @@ public sealed partial class TvUpdater
     /// <summary>Posts the .zip to the TV's installer. Returns "installed" or "identical" (already that exact build).</summary>
     private static async Task<string> UploadAsync(string ip, string password, string zipPath, CancellationToken ct)
     {
-        using var http = Installer(ip, password, TimeSpan.FromMinutes(3));
-
-        // Digest auth needs a first request to get the challenge; a GET is cheap and lets the POST go in one try.
-        using (var probe = await http.GetAsync($"http://{ip}:{InstallerPort}/plugin_install", ct).ConfigureAwait(false))
-        {
-            if (probe.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                throw new InvalidOperationException("the TV no longer accepts the saved password (developer mode turned off and on again?)");
-            }
-        }
-
         using var form = new MultipartFormDataContent();
         form.Add(new StringContent("Install"), "mysubmit");
         var file = new ByteArrayContent(await File.ReadAllBytesAsync(zipPath, ct).ConfigureAwait(false));
         file.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
         form.Add(file, "archive", Path.GetFileName(zipPath));
-        using var resp = await http.PostAsync($"http://{ip}:{InstallerPort}/plugin_install", form, ct).ConfigureAwait(false);
+        using var resp = await InstallerSendAsync(ip, password, HttpMethod.Post, form, ct).ConfigureAwait(false);
         string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         return InstallOutcome((int)resp.StatusCode, body);
     }
@@ -471,8 +564,11 @@ public sealed partial class TvUpdater
             return "installed";
         }
 
+        // Older firmware: <font color="red">…</font>; newer: Roku.Message().trigger('…') in a script
         var m = Regex.Match(body, @"<font color=""red"">([^<]{1,200})</font>", RegexOptions.IgnoreCase);
-        string why = m.Success ? m.Groups[1].Value.Trim() : $"the TV's installer answered {status}";
+        var all = Regex.Matches(body, @"\.trigger\('([^']{1,200})'\)");
+        string? failure = all.Select(x => x.Groups[1].Value).FirstOrDefault(x => x.Contains("Fail", StringComparison.OrdinalIgnoreCase));
+        string why = failure ?? (m.Success ? m.Groups[1].Value.Trim() : $"the TV's installer answered {status}");
         throw new InvalidOperationException(why);
     }
 

@@ -922,7 +922,7 @@ public class TvUpdaterTests
     public void Check_in_remembers_the_tv_but_never_updates_without_a_password()
     {
         var tvs = Make(out var dir);
-        var r = tvs.CheckIn("abc123", "Living room", "TCL 4K", "192.168.1.57", "1.0.2", "cade");
+        var r = tvs.CheckIn("abc123", "Living room", "TCL 4K", "192.168.1.57", "1.0.2", "cade", "::ffff:192.168.1.57");
         Assert.True(r.UpdateAvailable);
         Assert.False(r.AutoUpdate);
         Assert.False(r.Updating);
@@ -931,7 +931,9 @@ public class TvUpdaterTests
         Assert.Equal("cade", tv.UserName);
 
         // An internet address is ignored; the last home address stays
-        tvs.CheckIn("abc123", null, null, "8.8.8.8", "1.0.3", null);
+        tvs.CheckIn("abc123", null, null, "8.8.8.8", "1.0.3", null, "8.8.8.8");
+        // A made-up address that isn't where the request came from is ignored too
+        tvs.CheckIn("abc123", null, null, "192.168.1.66", "1.0.3", null, "192.168.1.99");
         tv = Assert.Single(tvs.List());
         Assert.Equal("192.168.1.57", tv.Ip);
         Assert.Equal("Living room", tv.Name);
@@ -947,7 +949,7 @@ public class TvUpdaterTests
     public void Rejects_odd_tv_ids()
     {
         var tvs = Make(out _);
-        Assert.Throws<ArgumentException>(() => tvs.CheckIn("../../etc", null, null, null, null, null));
+        Assert.Throws<ArgumentException>(() => tvs.CheckIn("../../etc", null, null, null, null, null, null));
     }
 
     [Fact]
@@ -988,7 +990,7 @@ public class TvUpdaterTests
             byte[] zip = System.Text.Encoding.ASCII.GetBytes("PK-fake-roku-app-1.0.3");
             File.WriteAllBytes(Path.Combine(dir, "roku", "ReelForge-Roku-1.0.3.zip"), zip); // as if downloaded already
 
-            tvs.CheckIn("tv1", "Bedroom", "TCL 4K", "127.0.0.1", "1.0.2", "cade");
+            tvs.CheckIn("tv1", "Bedroom", "TCL 4K", "127.0.0.1", "1.0.2", "cade", "127.0.0.1");
             var wrong = await tvs.SetPasswordAsync("tv1", "nope", CancellationToken.None);
             Assert.False(wrong.Ok);
             Assert.Contains("password", wrong.Message);
@@ -999,7 +1001,7 @@ public class TvUpdaterTests
             Assert.DoesNotContain("s3cret", File.ReadAllText(Path.Combine(dir, "tvs.json")));
 
             // Opening the app on the old version starts the install by itself
-            var r = tvs.CheckIn("tv1", null, null, "127.0.0.1", "1.0.2", null);
+            var r = tvs.CheckIn("tv1", null, null, "127.0.0.1", "1.0.2", null, "127.0.0.1");
             Assert.True(r.AutoUpdate);
             for (int i = 0; i < 100 && tvs.IsBusy("tv1"); i++)
             {
@@ -1012,8 +1014,15 @@ public class TvUpdaterTests
             Assert.Equal(zip, File.ReadAllBytes(Path.Combine(dir, "installed.zip")));
 
             // Up to date afterwards; a later launch on the old version again isn't retried right away
-            Assert.False(tvs.CheckIn("tv1", null, null, "127.0.0.1", "1.0.3", null).UpdateAvailable);
+            Assert.False(tvs.CheckIn("tv1", null, null, "127.0.0.1", "1.0.3", null, "127.0.0.1").UpdateAvailable);
             Assert.Equal("Up to date (1.0.3)", tvs.List()[0].Status);
+
+            // Showing up at a new address drops the saved password until the admin confirms it
+            tvs.CheckIn("tv1", null, null, "127.0.0.2", "1.0.3", null, "127.0.0.2");
+            tv = tvs.List()[0];
+            Assert.Equal(string.Empty, tv.ProtectedPassword);
+            Assert.True(tv.StatusIsError);
+            Assert.Contains("moved", tv.Status);
         }
         finally
         {
@@ -1034,6 +1043,16 @@ public class TvUpdaterTests
     }
 
     [Fact]
+    public void Answers_digest_challenges_like_rfc_2617()
+    {
+        string h = TvUpdater.DigestHeader(
+            "realm=\"testrealm@host.com\", qop=\"auth,auth-int\", nonce=\"dcd98b7102dd2f0e8b11d0f600bfb0c093\", opaque=\"5ccc069c403ebaf9f0171e9517f40e41\"",
+            "GET", "/dir/index.html", "Mufasa", "Circle Of Life", "0a4f113b");
+        Assert.Contains("response=\"6629fae49393a05397450978507c4ef1\"", h);
+        Assert.Contains("opaque=\"5ccc069c403ebaf9f0171e9517f40e41\"", h);
+    }
+
+    [Fact]
     public void Reads_the_roku_installer_reply()
     {
         Assert.Equal("installed", TvUpdater.InstallOutcome(200, "<html>... Install Success. ...</html>"));
@@ -1041,5 +1060,7 @@ public class TvUpdaterTests
         var ex = Assert.Throws<InvalidOperationException>(() => TvUpdater.InstallOutcome(200, "<font color=\"red\">Install Failure: Compilation Failed.</font>"));
         Assert.Contains("Compilation Failed", ex.Message);
         Assert.Throws<InvalidOperationException>(() => TvUpdater.InstallOutcome(401, ""));
+        var newer = Assert.Throws<InvalidOperationException>(() => TvUpdater.InstallOutcome(200, "<script>Roku.Message().trigger('Application Received: 12 bytes stored.').trigger('Install Failure: Compilation Failed.').render();</script>"));
+        Assert.Equal("Install Failure: Compilation Failed.", newer.Message);
     }
 }

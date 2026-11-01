@@ -43,7 +43,7 @@ public sealed class TvCheckInController : ControllerBase
         try
         {
             string? user = User.Identity?.Name;
-            return _tvs.CheckIn(req.DeviceId, req.Name, req.Model, req.Ip, req.AppVersion, user);
+            return _tvs.CheckIn(req.DeviceId, req.Name, req.Model, req.Ip, req.AppVersion, user, HttpContext.Connection.RemoteIpAddress?.ToString());
         }
         catch (ArgumentException ex)
         {

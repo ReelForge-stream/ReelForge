@@ -132,9 +132,12 @@ function onKeyEvent(key as string, press as boolean) as boolean
     else if key = "OK"
         m.top.selected = m.ids[m.index]
         return true
-    else if key = "down"
+    else if key = "down" or key = "back"
+        ' Back from the menu returns to the page, like Down
         m.top.leaveDown = true
         return true
+    else if key = "up"
+        return true ' already at the top
     end if
     return false
 end function
