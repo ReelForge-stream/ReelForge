@@ -4,8 +4,11 @@ The ReelForge app for Roku TVs and streaming sticks. It's built on the open-sour
 [Jellyfin app for Roku](https://github.com/jellyfin/jellyfin-roku) (GPL-2.0, see `LICENSE`), with the
 ReelForge look and these additions:
 
-- **Featured row** at the top of Home. It rotates through 15 unwatched movies and shows every 9 seconds while
-  you're on it, with the title's artwork filling the screen. You can turn it off in Settings › User Interface › Home Rows.
+- **The ReelForge look**, like the web app: a top menu (Home, Movies, TV Shows, My List, Search, Settings), a big
+  billboard on Home with **Play** and **More Info**, wide picture cards with the title on them, ReelForge fonts and
+  colors, and restyled movie, show and library pages. The player, settings and music screens are unchanged.
+- **Billboard** at the top of Home. It rotates through new and unwatched movies and shows every 9 seconds. When you
+  move down to the rows, it shows whatever you're on. You can turn it off in Settings › User Interface › Home Rows.
 - **IMDb and Rotten Tomatoes scores** on movie and show pages, from the ReelForge server (IMDb scores need the OMDb key
   in the ReelForge web app under Settings › General).
 - **Sign in with a QR code.** The sign-in screen shows a QR code. Scan it with your phone's camera, tap

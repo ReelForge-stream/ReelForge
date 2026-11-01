@@ -62,11 +62,15 @@ sub onFeatured()
         return
     end if
     ' Home opens on the billboard; later refreshes leave focus where the viewer put it
-    if m.heroShown <> true or m.state <> "rows" or not m.homeRows.isInFocusChain()
+    ' (but never pull focus away from somewhere the viewer already moved to while it loaded)
+    if m.topBar.isInFocusChain()
+        m.heroShown = true
+    else if m.homeRows.isInFocusChain() and (m.heroShown = true or m.userMoved = true)
+        m.heroShown = true
+        showRowItem()
+    else
         m.heroShown = true
         focusHero()
-    else
-        showRowItem()
     end if
     m.rotateTimer.control = "start"
 end sub
@@ -89,7 +93,11 @@ end sub
 
 ' While the rows have focus, the billboard describes the highlighted card.
 sub onRowItemFocused()
-    if m.state = "rows" then showRowItem()
+    if m.state = "rows"
+        f = m.homeRows.rowItemFocused
+        if isValid(f) and f.count() = 2 and (f[0] > 0 or f[1] > 0) then m.userMoved = true
+        showRowItem()
+    end if
 end sub
 
 sub onRowsFocus()
@@ -434,6 +442,7 @@ end function
 ' Special handling for key presses on the home screen.
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
+    m.userMoved = true
 
     ' ReelForge: billboard buttons
     if m.state = "hero" and m.heroFocus.hasFocus()

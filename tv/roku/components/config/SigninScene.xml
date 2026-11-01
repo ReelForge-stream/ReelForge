@@ -3,6 +3,7 @@
 <component name="SigninScene" extends="JFScreen">
   <children>
     <Text
+      id="signInTitle"
       text="Sign In"
       horizAlign="center"
       font="font:LargeSystemFont"
@@ -17,9 +18,7 @@
         <Poster id="qrImage" width="400" height="400" translation="[10, 10]" loadDisplayMode="scaleToFit" />
         <Label id="qrLoading" text="Getting a code…" width="420" height="420" horizAlign="center" vertAlign="center" color="#17202A" font="font:SmallSystemFont" />
       </Rectangle>
-      <Label id="qrCode" text="" width="780" horizAlign="center" translation="[0, 548]" color="#FF8A1F">
-        <Font role="font" uri="font:BoldSystemFontFile" size="72" />
-      </Label>
+      <Label id="qrCode" text="" width="780" horizAlign="center" translation="[0, 548]" color="#FF8A1F" />
       <Label id="qrHelp" text="" width="660" wrap="true" horizAlign="center" lineSpacing="6" translation="[60, 650]" color="#93A4B5" font="font:SmallSystemFont" />
     </Rectangle>
 

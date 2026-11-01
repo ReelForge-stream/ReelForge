@@ -1,6 +1,7 @@
 import "pkg:/source/api/Image.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
 
 import "pkg:/source/enums/AnimationControl.bs"
 import "pkg:/source/enums/AnimationState.bs"
@@ -76,6 +77,42 @@ sub init()
     m.loadItemsTask = createObject("roSGNode", "LoadItemsTask")
     m.loadItemsTask.observeField("content", "onMyListLoaded")
     m.loadItemsTask.itemsToLoad = "isInMyList"
+    rfStyle()
+end sub
+
+' ReelForge: the web app's fonts and colors on the details page
+sub rfStyle()
+    for each id in ["releaseYear", "aired", "dot", "genres", "runtime", "communityRating", "criticRatingLabel", "imdbRating", "ends-at"]
+        node = m.top.findNode(id)
+        if isValid(node)
+            node.font = rfFont("textMedium", 28)
+            node.color = rfColor.TEXT
+        end if
+    end for
+    rating = m.top.findNode("officialRating")
+    if isValid(rating)
+        rating.font = rfFont("textSemi", 26)
+        rating.color = rfColor.MUTED
+    end if
+    overview = m.top.findNode("overview")
+    if isValid(overview)
+        overview.font = rfFont("text", 30)
+        overview.color = rfColor.TEXT
+        overview.maxLines = 5
+        overview.width = 1040
+    end if
+    director = m.top.findNode("director")
+    if isValid(director)
+        director.font = rfFont("text", 26)
+        director.color = rfColor.MUTED
+    end if
+    for each id in ["video_codec", "audio_codec", "subtitle_codec", "video_codec_count", "audio_codec_count", "subtitle_codec_count", "rotationWarning"]
+        node = m.top.findNode(id)
+        if isValid(node)
+            node.font = rfFont("text", 24)
+            node.color = rfColor.MUTED
+        end if
+    end for
 end sub
 
 sub calculateButtonThumbProperties()
@@ -147,8 +184,9 @@ sub onMovieExtrasHasItems()
 end sub
 
 sub setButtonColors()
-    m.buttonGrp.focusBitmapUri = "pkg:/images/white.9.png"
-    m.buttonGrp.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+    ' ReelForge: each button draws its own white pill when focused, so the list adds no highlight
+    m.buttonGrp.focusBitmapUri = ""
+    m.buttonGrp.drawFocusFeedback = false
 end sub
 
 ' OnScreenShown: Callback function when view is presented on screen
@@ -259,7 +297,7 @@ sub setBackdropImage(itemData as object)
     movieBackground.id = "movieBackground"
     movieBackground.width = "1920"
     movieBackground.height = "1080"
-    movieBackground.color = "#000000"
+    movieBackground.color = rfColor.BASE
     if not isValid(m.top.findNode("movieBackdrop"))
         m.top.insertChild(movieBackground, 0)
     end if
@@ -273,7 +311,7 @@ sub setBackdropImage(itemData as object)
     movieBackdrop.translation = "[0,0]"
     movieBackdrop.width = "1920"
     movieBackdrop.height = "1080"
-    movieBackdrop.opacity = .3
+    movieBackdrop.opacity = 1
     movieBackdrop.uri = ImageURL(m.top.id, imageVersion, {
         "maxWidth": 1920,
         "Tag": imageTag
@@ -281,6 +319,21 @@ sub setBackdropImage(itemData as object)
 
     if not isValid(m.top.findNode("movieBackdrop"))
         m.top.insertChild(movieBackdrop, 1)
+        fadeLeft = createObject("roSGNode", "Poster")
+        fadeLeft.id = "movieFadeLeft"
+        fadeLeft.uri = "pkg:/images/rf/rf-fade-left.png"
+        fadeLeft.width = 1500
+        fadeLeft.height = 1080
+        fadeLeft.loadDisplayMode = "scaleToFill"
+        m.top.insertChild(fadeLeft, 2)
+        fadeBottom = createObject("roSGNode", "Poster")
+        fadeBottom.id = "movieFadeBottom"
+        fadeBottom.uri = "pkg:/images/rf/rf-fade-bottom.png"
+        fadeBottom.width = 1920
+        fadeBottom.height = 760
+        fadeBottom.translation = [0, 320]
+        fadeBottom.loadDisplayMode = "scaleToFill"
+        m.top.insertChild(fadeBottom, 3)
     end if
 end sub
 
@@ -296,13 +349,13 @@ sub onLogoImageURIChange()
     end if
     movieLogo.id = "movieLogo"
     movieLogo.loadDisplayMode = "scaleToFit"
-    movieLogo.translation = [100, 25]
-    movieLogo.width = "500"
-    movieLogo.height = "250"
+    movieLogo.translation = [96, 60]
+    movieLogo.width = "640"
+    movieLogo.height = "200"
     movieLogo.uri = m.top.logoImageURI
 
     if not isValid(m.top.findNode("movieLogo"))
-        m.top.insertChild(movieLogo, 1)
+        m.top.insertChild(movieLogo, 4)
     end if
 end sub
 
@@ -310,7 +363,10 @@ end sub
 '
 ' @param {object} itemData - meta data for current item
 sub setLogoImage(itemData as object)
-    if LCase(itemData.type) = VideoType.EPISODE or LCase(itemData.type) = VideoType.SERIES
+    if LCase(itemData.type) = VideoType.SERIES then return
+    ' ReelForge: episodes show the show's name as the big title (the episode name sits under it)
+    if LCase(itemData.type) = VideoType.EPISODE
+        if isValidAndNotEmpty(itemData.SeriesName) then addTextMovieTitle({ name: itemData.SeriesName })
         return
     end if
 
@@ -328,13 +384,13 @@ sub setLogoImage(itemData as object)
     end if
     movieLogo.id = "movieLogo"
     movieLogo.loadDisplayMode = "scaleToFit"
-    movieLogo.translation = [100, 25]
-    movieLogo.width = "500"
-    movieLogo.height = "250"
+    movieLogo.translation = [96, 60]
+    movieLogo.width = "640"
+    movieLogo.height = "200"
     movieLogo.uri = logoURL
 
     if not isValid(m.top.findNode("movieLogo"))
-        m.top.insertChild(movieLogo, 1)
+        m.top.insertChild(movieLogo, 4)
     end if
 end sub
 
@@ -344,14 +400,14 @@ sub addTextMovieTitle(itemData as object)
         movieTitle = createObject("roSGNode", "Text")
     end if
     movieTitle.id = "movieTitle"
-    movieTitle.font = "font:LargeSystemFont"
-    movieTitle.font.size = 70
+    movieTitle.font = rfFont("displayBold", 84)
+    movieTitle.color = rfColor.TEXT
     movieTitle.text = itemData.name
-    movieTitle.translation = [100, 210]
+    movieTitle.translation = [96, 160]
     movieTitle.width = 1700
 
     if not isValid(m.top.findNode("movieTitle"))
-        m.top.insertChild(movieTitle, 1)
+        m.top.insertChild(movieTitle, 4)
     end if
 end sub
 
@@ -542,7 +598,8 @@ sub addEpisodeTitle(itemData as object)
     if not isValid(episodeTitle)
         episodeTitle = createObject("roSGNode", "Text")
         episodeTitle.id = "episodeTitle"
-        episodeTitle.font = "font:MediumBoldSystemFont"
+        episodeTitle.font = rfFont("display", 42)
+        episodeTitle.color = rfColor.TEXT
     end if
 
     titleText = ""

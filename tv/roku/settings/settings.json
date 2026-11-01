@@ -836,8 +836,8 @@
             "default": "true"
           },
           {
-            "title": "Show Featured Row",
-            "description": "Show a rotating row of unwatched movies and shows at the top of the home screen, with their artwork filling the screen.",
+            "title": "Show Billboard",
+            "description": "Show the big billboard at the top of the home screen. It rotates through new and unwatched movies and shows, with Play and More Info buttons.",
             "settingName": "ui.home.reelforgeFeatured",
             "type": "bool",
             "default": "true"
