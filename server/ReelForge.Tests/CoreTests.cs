@@ -888,3 +888,158 @@ public class TvSignInTests
         Assert.InRange(qr.Size, 21, 45); // a short link stays a small, easy-to-scan code
     }
 }
+
+public class TvUpdaterTests
+{
+    private static TvUpdater Make(out string dir)
+    {
+        dir = Path.Combine(Path.GetTempPath(), "rf-tv-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return new TvUpdater(NullLogger<TvUpdater>.Instance, dir) { TargetVersionOverride = "1.0.3" };
+    }
+
+    [Theory]
+    [InlineData("1.0.2", "1.0.3", true)]
+    [InlineData("1.0.3", "1.0.3", false)]
+    [InlineData("1.1.0", "1.0.3", false)]
+    [InlineData(null, "1.0.3", true)]
+    [InlineData("garbage", "1.0.3", true)]
+    [InlineData("1.0.2", "0.0.0-dev", false)]
+    public void Compares_versions(string? have, string want, bool older) => Assert.Equal(older, TvUpdater.IsOlder(have, want));
+
+    [Theory]
+    [InlineData("192.168.1.57", true)]
+    [InlineData("10.0.0.4", true)]
+    [InlineData("172.20.1.1", true)]
+    [InlineData("172.32.1.1", false)]
+    [InlineData("8.8.8.8", false)]
+    [InlineData("127.0.0.1", false)]
+    [InlineData("fe80::1", false)]
+    [InlineData("home.reelforge.stream", false)]
+    public void Only_sends_passwords_to_home_addresses(string ip, bool home) => Assert.Equal(home, TvUpdater.IsHomeAddress(ip));
+
+    [Fact]
+    public void Check_in_remembers_the_tv_but_never_updates_without_a_password()
+    {
+        var tvs = Make(out var dir);
+        var r = tvs.CheckIn("abc123", "Living room", "TCL 4K", "192.168.1.57", "1.0.2", "cade");
+        Assert.True(r.UpdateAvailable);
+        Assert.False(r.AutoUpdate);
+        Assert.False(r.Updating);
+        var tv = Assert.Single(tvs.List());
+        Assert.Equal("192.168.1.57", tv.Ip);
+        Assert.Equal("cade", tv.UserName);
+
+        // An internet address is ignored; the last home address stays
+        tvs.CheckIn("abc123", null, null, "8.8.8.8", "1.0.3", null);
+        tv = Assert.Single(tvs.List());
+        Assert.Equal("192.168.1.57", tv.Ip);
+        Assert.Equal("Living room", tv.Name);
+        Assert.False(TvUpdater.IsOlder(tv.AppVersion, "1.0.3"));
+
+        // Survives a restart
+        var again = new TvUpdater(NullLogger<TvUpdater>.Instance, dir);
+        Assert.Equal("Living room", Assert.Single(again.List()).Name);
+        Assert.False(again.StartInstall("abc123", automatic: false)); // no password saved
+    }
+
+    [Fact]
+    public void Rejects_odd_tv_ids()
+    {
+        var tvs = Make(out _);
+        Assert.Throws<ArgumentException>(() => tvs.CheckIn("../../etc", null, null, null, null, null));
+    }
+
+    [Fact]
+    public void Encrypts_saved_passwords()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "rf-tvs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string stored = TvSecret.Protect("hunter2", dir);
+        Assert.DoesNotContain("hunter2", stored);
+        Assert.Equal("hunter2", TvSecret.Unprotect(stored, dir));
+    }
+
+    /// <summary>The whole path against a stand-in Roku (needs python3; skipped without it).</summary>
+    [Fact]
+    public async Task Installs_the_app_on_a_tv_end_to_end()
+    {
+        string? python = new[] { "/usr/bin/python3", "/usr/local/bin/python3" }.FirstOrDefault(File.Exists);
+        if (python is null)
+        {
+            return;
+        }
+
+        var tvs = Make(out var dir);
+        int ecp = FreePort(), inst = FreePort();
+        var psi = new System.Diagnostics.ProcessStartInfo(python)
+        {
+            ArgumentList = { "-I", Path.Combine(AppContext.BaseDirectory, "Fakes", "fake_roku.py"), ecp.ToString(), inst.ToString(), "s3cret", dir },
+            RedirectStandardOutput = true,
+        };
+        using var roku = System.Diagnostics.Process.Start(psi)!;
+        TvUpdater.AllowLoopbackForTests = true;
+        TvUpdater.EcpPort = ecp;
+        TvUpdater.InstallerPort = inst;
+        try
+        {
+            Assert.Equal("ready", await roku.StandardOutput.ReadLineAsync());
+            Directory.CreateDirectory(Path.Combine(dir, "roku"));
+            byte[] zip = System.Text.Encoding.ASCII.GetBytes("PK-fake-roku-app-1.0.3");
+            File.WriteAllBytes(Path.Combine(dir, "roku", "ReelForge-Roku-1.0.3.zip"), zip); // as if downloaded already
+
+            tvs.CheckIn("tv1", "Bedroom", "TCL 4K", "127.0.0.1", "1.0.2", "cade");
+            var wrong = await tvs.SetPasswordAsync("tv1", "nope", CancellationToken.None);
+            Assert.False(wrong.Ok);
+            Assert.Contains("password", wrong.Message);
+
+            var ok = await tvs.SetPasswordAsync("tv1", "s3cret", CancellationToken.None);
+            Assert.True(ok.Ok, ok.Message);
+            Assert.Equal("X00TEST1234", tvs.List()[0].Serial);
+            Assert.DoesNotContain("s3cret", File.ReadAllText(Path.Combine(dir, "tvs.json")));
+
+            // Opening the app on the old version starts the install by itself
+            var r = tvs.CheckIn("tv1", null, null, "127.0.0.1", "1.0.2", null);
+            Assert.True(r.AutoUpdate);
+            for (int i = 0; i < 100 && tvs.IsBusy("tv1"); i++)
+            {
+                await Task.Delay(100);
+            }
+
+            var tv = tvs.List()[0];
+            Assert.False(tv.StatusIsError, tv.Status);
+            Assert.Equal("Installed 1.0.3", tv.Status);
+            Assert.Equal(zip, File.ReadAllBytes(Path.Combine(dir, "installed.zip")));
+
+            // Up to date afterwards; a later launch on the old version again isn't retried right away
+            Assert.False(tvs.CheckIn("tv1", null, null, "127.0.0.1", "1.0.3", null).UpdateAvailable);
+            Assert.Equal("Up to date (1.0.3)", tvs.List()[0].Status);
+        }
+        finally
+        {
+            TvUpdater.AllowLoopbackForTests = false;
+            TvUpdater.EcpPort = 8060;
+            TvUpdater.InstallerPort = 80;
+            roku.Kill();
+        }
+    }
+
+    private static int FreePort()
+    {
+        var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        l.Start();
+        int port = ((System.Net.IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return port;
+    }
+
+    [Fact]
+    public void Reads_the_roku_installer_reply()
+    {
+        Assert.Equal("installed", TvUpdater.InstallOutcome(200, "<html>... Install Success. ...</html>"));
+        Assert.Equal("identical", TvUpdater.InstallOutcome(200, "Install Failure: Identical to previous version"));
+        var ex = Assert.Throws<InvalidOperationException>(() => TvUpdater.InstallOutcome(200, "<font color=\"red\">Install Failure: Compilation Failed.</font>"));
+        Assert.Contains("Compilation Failed", ex.Message);
+        Assert.Throws<InvalidOperationException>(() => TvUpdater.InstallOutcome(401, ""));
+    }
+}

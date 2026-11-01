@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge: tells the server this TV opened the app (and which version), so it can update the app itself. -->
+<component name="TvCheckInTask" extends="Task">
+  <interface>
+    <field id="result" type="assocarray" />
+  </interface>
+</component>

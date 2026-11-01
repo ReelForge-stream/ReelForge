@@ -15,6 +15,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Fakes/*.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../ReelForge/ReelForge.csproj" />
   </ItemGroup>
 </Project>

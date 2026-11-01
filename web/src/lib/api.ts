@@ -1,6 +1,6 @@
 import type {
   ActiveSession, ActivityEntry, AdminUser, DupGroup, HeldFile, Item, Job, MediaSource, Overview, ScheduledTask, Session, Settings,
-  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult, SavingsResult, AgentsResult, Ratings,
+  SpaceSaverResult, SystemInfo, User, UserPolicy, VirtualFolder, DownloadJob, DownloadOptions, WatchHistoryResult, SavingsResult, AgentsResult, TvsResult, Ratings,
 } from './types';
 import { demo } from './demo';
 import { describeDevice } from './device';
@@ -139,6 +139,7 @@ export class Api {
 
   get = <T,>(path: string) => this.req<T>('GET', path);
   post = <T,>(path: string, body?: unknown) => this.req<T>('POST', path, body ?? {});
+  put = <T,>(path: string, body?: unknown) => this.req<T>('PUT', path, body ?? {});
   del = <T,>(path: string) => this.req<T>('DELETE', path);
 
   // ---------- Browsing ----------
@@ -530,6 +531,10 @@ export class Api {
     agents: () => this.get<AgentsResult>('/ReelForge/Agents'),
     updateAgent: (id: string, change: { Enabled?: boolean; AllowCpu?: boolean; Name?: string; MaxJobs?: number }) => this.post(`/ReelForge/Agents/${id}`, change),
     removeAgent: (id: string) => this.del(`/ReelForge/Agents/${id}`),
+    tvs: () => this.get<TvsResult>('/ReelForge/Tvs'),
+    setTvPassword: (id: string, Password: string) => this.put<{ Message: string }>(`/ReelForge/Tvs/${encodeURIComponent(id)}/Password`, { Password }),
+    updateTv: (id: string) => this.post(`/ReelForge/Tvs/${encodeURIComponent(id)}/Update`),
+    removeTv: (id: string) => this.del(`/ReelForge/Tvs/${encodeURIComponent(id)}`),
     newAgentKey: () => this.post<{ PairingKey: string }>('/ReelForge/Agents/NewKey'),
     omdbSettings: () => this.get<{ HasKey: boolean; KeyHint?: string }>('/ReelForge/Ratings/Settings'),
     saveOmdbKey: (Key: string) => this.post('/ReelForge/Ratings/Settings', { Key }),

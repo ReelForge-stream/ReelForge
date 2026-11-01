@@ -7,6 +7,7 @@ const TABS = [
   { to: '/manager/queue', label: 'Conversions' },
   { to: '/manager/saved', label: 'Space saved' },
   { to: '/manager/agents', label: 'Agents' },
+  { to: '/manager/tvs', label: 'TVs' },
   { to: '/manager/holding', label: 'Removed files' },
   { to: '/manager/settings', label: 'Settings' },
 ];

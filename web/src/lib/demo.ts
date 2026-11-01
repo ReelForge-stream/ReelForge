@@ -516,6 +516,16 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     };
   }
   if (p.startsWith('/ReelForge/Agents')) return undefined;
+  if (p === '/ReelForge/Tvs' && method === 'GET') {
+    return {
+      ServerVersion: '0.9.0',
+      Tvs: [
+        { Id: 't1', Name: 'Living Room TV', Model: 'TCL 4K Roku TV', Ip: '192.168.1.57', AppVersion: '0.9.0', UserName: 'Cade', LastSeenUtc: new Date(Date.now() - 6e5).toISOString(), AutoUpdate: true, UpToDate: true, Updating: false, Status: 'Installed 0.9.0', StatusIsError: false, StatusUtc: new Date(Date.now() - 864e5).toISOString() },
+        { Id: 't2', Name: 'Kids Room', Model: 'Roku Express 4K', Ip: '192.168.1.63', AppVersion: '0.8.2', UserName: 'Kids', LastSeenUtc: new Date(Date.now() - 2.6e8).toISOString(), AutoUpdate: false, UpToDate: false, Updating: false, Status: null, StatusIsError: false, StatusUtc: new Date(0).toISOString() },
+      ],
+    };
+  }
+  if (p.startsWith('/ReelForge/Tvs')) return method === 'PUT' ? { Message: 'Saved. This TV now updates by itself when a new version comes out.' } : undefined;
   if (p === '/ReelForge/Ratings/Settings') return method === 'GET' ? { HasKey: true, KeyHint: '••••a1b2' } : undefined;
   if (p === '/ReelForge/LibraryScan') return method === 'GET' ? { Minutes: 5, Running: false } : undefined;
   if (p === '/ReelForge/Holding') return held;

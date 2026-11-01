@@ -22,6 +22,7 @@ import Queue from './manager/Queue';
 import Holding from './manager/Holding';
 import Saved from './manager/Saved';
 import Agents from './manager/Agents';
+import Tvs from './manager/Tvs';
 import ManagerSettings from './manager/Settings';
 import SettingsLayout from './settings/SettingsLayout';
 import SettingsGeneral from './settings/General';
@@ -123,6 +124,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
               <Route path="queue" element={<Queue />} />
               <Route path="saved" element={<Saved />} />
               <Route path="agents" element={<Agents />} />
+              <Route path="tvs" element={<Tvs />} />
               <Route path="holding" element={<Holding />} />
               <Route path="settings" element={<ManagerSettings />} />
             </Route>

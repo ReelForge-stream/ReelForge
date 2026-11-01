@@ -43,7 +43,16 @@ It stays installed, also after restarts, until you replace it with another one.
      to be on the home Wi-Fi.
    - Codes renew by themselves every 9 minutes, or press **New QR code**.
 
-**Updating:** repeat step 3 with the newer .zip (it replaces the old one).
+**Updating by itself (recommended):** in the ReelForge web app, open **Media Manager › TVs**. Each TV shows up there
+after ReelForge opens on it once. Click **Turn on automatic updates** and enter that TV's developer password (the one
+from step 2). From then on, whenever your server gets a new ReelForge version, the server installs the matching app
+on the TV the next time the app opens there (the app closes and reopens by itself), or right away with **Update now**.
+- The server and the TV need to be on the same home network.
+- The password is checked against the TV, stored encrypted on the server, and only sent to that same Roku (the
+  server checks its serial number first).
+- If you turn developer mode off and on again, the password changes: save the new one.
+
+**Updating by hand:** repeat step 3 with the newer .zip (it replaces the old one).
 
 **Several TVs:** repeat for each Roku. Each one needs developer mode turned on once.
 

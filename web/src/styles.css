@@ -1313,3 +1313,12 @@ a.cast-card:hover .cast-name { color: var(--ember); }
 .link-who-item:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
 .link-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 @media (max-width: 560px) { .link-card { padding: 24px 18px; } .link-actions .btn { flex: 1 1 100%; } }
+
+/* Media Manager → TVs */
+.agent-card .agent-settings:has(> .btn) { display: flex; flex-wrap: wrap; gap: 8px; }
+.tv-password { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.tv-password label { display: grid; gap: 6px; }
+.tv-password label span { font-size: 0.9rem; color: var(--muted); }
+.tv-password .input { width: min(360px, 100%); }
+.tv-password-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.empty-panel p { margin: 0; color: var(--muted); }
