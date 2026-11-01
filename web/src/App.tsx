@@ -32,6 +32,7 @@ import SettingsNetwork from './settings/Network';
 import SettingsActivity, { WatchingBadge } from './settings/Activity';
 import Downloads from './pages/Downloads';
 import Person from './pages/Person';
+import LinkTv from './pages/LinkTv';
 import { DownloadWatcher, useCanDownload } from './lib/download';
 import { InstallBanner, InstallMenuItem } from './lib/install';
 
@@ -113,6 +114,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
           <Route path="search" element={<Search />} />
           <Route path="downloads" element={<Downloads />} />
           <Route path="person/:id" element={<Person />} />
+          <Route path="link" element={<LinkTv />} />
           {api.isAdmin && (
             <Route path="manager" element={<ManagerLayout />}>
               <Route index element={<ManagerOverview />} />
@@ -268,6 +270,10 @@ function ProfileMenu({ onSignOut }: { onSignOut: (switchTo?: string) => void }) 
           </div>
           <div className="pm-actions">
             <InstallMenuItem onDone={() => setOpen(false)} />
+            <button role="menuitem" className="pm-row" onClick={() => go('/link')}>
+              <span className="pm-icon"><Icon.tv /></span>
+              <span>Sign in a TV</span>
+            </button>
             {canDownload && (
               <button role="menuitem" className="pm-row" onClick={() => go('/downloads')}>
                 <span className="pm-icon"><Icon.download /></span>

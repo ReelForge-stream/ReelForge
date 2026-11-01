@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge: asks the server for a Quick Connect code for the QR sign-in screen. -->
+<component name="QrSignInTask" extends="Task">
+  <interface>
+    <!-- { Code, Secret } from POST /QuickConnect/Initiate, or { error: true } when phone sign-in isn't available -->
+    <field id="result" type="assocarray" />
+  </interface>
+</component>

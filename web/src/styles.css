@@ -1293,3 +1293,23 @@ a.cast-card:hover .cast-name { color: var(--ember); }
 }
 .check:indeterminate { border-color: var(--ember); }
 .check:indeterminate::after { content: ''; width: 10px; height: 2px; border-radius: 1px; background: var(--ember); }
+
+/* Sign in a TV (/link) */
+.link-tv { display: flex; justify-content: center; padding-top: calc(var(--bar, 64px) + 32px); padding-bottom: 48px; }
+.link-card { width: min(520px, 100%); background: var(--surface); border-radius: 16px; padding: 32px 28px; display: grid; gap: 14px; justify-items: start; }
+.link-card h1 { font-size: 1.6rem; margin: 0; }
+.link-icon { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: rgba(255, 138, 31, 0.14); color: var(--ember); }
+.link-icon svg { width: 28px; height: 28px; }
+.link-icon.ok { background: rgba(95, 211, 166, 0.16); color: var(--coolant); }
+.link-code { font-family: var(--display); font-size: 2.6rem; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; margin: 4px 0 0; }
+.link-form { display: flex; gap: 10px; width: 100%; flex-wrap: wrap; }
+.link-code-input { flex: 1 1 180px; font-size: 1.5rem; letter-spacing: 0.2em; text-align: center; font-variant-numeric: tabular-nums; }
+.link-as { display: flex; align-items: center; gap: 10px; margin: 0; }
+.link-who { width: 100%; display: grid; gap: 10px; }
+.link-who-label { color: var(--muted); font-size: var(--s-1); }
+.link-who-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.link-who-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 12px; min-width: 84px; border-radius: 12px; border: 2px solid transparent; background: var(--surface-2); color: var(--fg); cursor: pointer; font: inherit; }
+.link-who-item.on { border-color: var(--ember); }
+.link-who-item:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.link-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+@media (max-width: 560px) { .link-card { padding: 24px 18px; } .link-actions .btn { flex: 1 1 100%; } }

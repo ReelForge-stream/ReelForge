@@ -96,7 +96,7 @@ export interface Item {
 export interface User {
   Id: string;
   Name: string;
-  Policy?: { IsAdministrator?: boolean; EnableContentDownloading?: boolean };
+  Policy?: { IsAdministrator?: boolean; EnableContentDownloading?: boolean; IsDisabled?: boolean };
   HasPassword?: boolean;
   PrimaryImageTag?: string;
 }

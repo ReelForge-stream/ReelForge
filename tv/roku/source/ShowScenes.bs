@@ -531,8 +531,8 @@ function CreateSigninGroup(user = "", profileImageUri = "")
     ' Add checkbox for saving credentials
     saveCredentials = group.findNode("saveCredentials")
 
-    quickConnect = group.findNode("quickConnect")
-    quickConnect.observeField("selected", port)
+    ' ReelForge: the screen runs phone (QR) sign-in itself and says when a phone approved it
+    group.observeField("qrAuthenticated", port)
 
     button = group.findNode("submit")
     button.observeField("selected", port)
@@ -573,31 +573,10 @@ function CreateSigninGroup(user = "", profileImageUri = "")
                 end if
                 stopLoadingSpinner()
                 group.alert = tr("Login attempt failed.")
-            else if isStringEqual(node, "quickConnect")
-                json = initQuickConnect()
-                if json = invalid
-                    group.alert = tr("Quick Connect not available.")
-                else
-                    ' Server user is talking to is at least 10.8 and has quick connect enabled...
-                    m.quickConnectDialog = createObject("roSGNode", "QuickConnectDialog")
-                    m.quickConnectDialog.saveCredentials = saveCredentials.checkedState[0]
-                    m.quickConnectDialog.quickConnectJson = json
-                    m.quickConnectDialog.title = tr("Quick Connect")
-                    m.quickConnectDialog.message = [tr("Here is your Quick Connect code: ") + json.Code, tr("(Dialog will close automatically)")]
-                    m.quickConnectDialog.buttons = [tr("Cancel")]
-                    m.quickConnectDialog.observeField("authenticated", port)
-                    dlgPalette = createObject("roSGNode", "RSGPalette")
-                    dlgPalette.colors = {
-                        DialogBackgroundColor: ColorPalette.ELEMENTBACKGROUND,
-                        DialogFocusColor: chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT),
-                        DialogFocusItemColor: ColorPalette.WHITE,
-                        DialogSecondaryTextColor: ColorPalette.WHITE,
-                        DialogSecondaryItemColor: ColorPalette.LIGHTBLUE,
-                        DialogTextColor: ColorPalette.WHITE
-                    }
-                    m.quickConnectDialog.palette = dlgPalette
-                    m.scene.dialog = m.quickConnectDialog
-                end if
+            else if msg.getField() = "qrAuthenticated" and msg.getData() = true
+                ' Signed in by approving the QR code on a phone (the QuickConnect task already logged in)
+                set_setting("saveCredentials", saveCredentials.checkedState[0].toStr())
+                return "true"
             else if msg.getField() = "authenticated"
                 authenticated = msg.getData()
                 if authenticated

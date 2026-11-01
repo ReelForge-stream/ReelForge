@@ -36,16 +36,20 @@ sub init()
     m.profileImage.observeField("loadStatus", "onPosterLoadStatusChanged")
 
     m.submit = m.top.findNode("submit")
-    m.submit.background = ColorPalette.LIGHTBLUE
-    m.submit.color = ColorPalette.DARKGREY
+    m.submit.background = "#2B3846"
+    m.submit.color = ColorPalette.WHITE
     m.submit.focusBackground = ColorPalette.HIGHLIGHT
-    m.submit.focusColor = ColorPalette.WHITE
+    m.submit.focusColor = "#17202A"
 
     m.quickConnect = m.top.findNode("quickConnect")
-    m.quickConnect.background = ColorPalette.LIGHTBLUE
-    m.quickConnect.color = ColorPalette.DARKGREY
+    m.quickConnect.background = "#2B3846"
+    m.quickConnect.color = ColorPalette.WHITE
     m.quickConnect.focusBackground = ColorPalette.HIGHLIGHT
-    m.quickConnect.focusColor = ColorPalette.WHITE
+    m.quickConnect.focusColor = "#17202A"
+    ' "New QR code" asks the server for a fresh code (the old one stops working)
+    m.quickConnect.observeField("selected", "onNewQrCode")
+
+    initQrSignIn()
 
     m.errorContainer = m.top.findNode("errorContainer")
     m.errorContainer.color = "#CC0000"
@@ -214,3 +218,138 @@ sub onAllFieldsSubmitted()
     group = m.global.sceneManager.callFunc("getActiveScene")
     group.lastFocus = m.submit
 end sub
+
+' ---------------------------------------------------------------- ReelForge: QR sign-in
+'
+' On open the screen asks the server for a Quick Connect code and shows it as a QR code (a link to
+' <server>/reelforge/link?code=…) plus the digits. Every 3 seconds it asks whether someone approved it
+' on their phone; when they have, qrAuthenticated fires and ShowScenes finishes signing in.
+' Codes expire on the server after a few minutes, so a fresh one is fetched every 9 minutes.
+
+sub initQrSignIn()
+    m.qrPanel = m.top.findNode("qrPanel")
+    m.qrImage = m.top.findNode("qrImage")
+    m.qrLoading = m.top.findNode("qrLoading")
+    m.qrCode = m.top.findNode("qrCode")
+    m.qrHelp = m.top.findNode("qrHelp")
+    m.qrPollTimer = m.top.findNode("quickConnectTimer")
+    m.qrPollTimer.observeField("fire", "onQrPoll")
+    m.qrRefreshTimer = m.top.findNode("qrRefreshTimer")
+    m.qrRefreshTimer.observeField("fire", "onNewQrCode")
+    m.qrImage.observeField("loadStatus", "onQrImageStatus")
+    m.qrSecret = ""
+    requestQrCode()
+end sub
+
+sub requestQrCode()
+    m.qrPollTimer.control = "stop"
+    m.qrSecret = ""
+    m.qrImage.uri = ""
+    m.qrLoading.text = tr("Getting a code…")
+    m.qrLoading.visible = true
+    m.qrCode.text = ""
+    m.qrHelp.text = ""
+
+    m.qrInitTask = CreateObject("roSGNode", "QrSignInTask")
+    m.qrInitTask.observeField("result", "onQrCode")
+    m.qrInitTask.control = "RUN"
+end sub
+
+sub onQrCode()
+    result = m.qrInitTask.result
+    m.qrInitTask.unobserveField("result")
+    if not isValid(result) or result.error = true or not isValid(result.Code)
+        m.qrLoading.text = tr("Phone sign-in is turned off on this server.")
+        m.qrHelp.text = tr("Use your password instead, or turn on Quick Connect in the server's settings.")
+        return
+    end if
+
+    code = result.Code
+    m.qrSecret = result.Secret
+    server = rfServerUrl()
+    m.qrImage.uri = `${server}/ReelForge/QuickConnect/Qr?code=${code}&size=400`
+    m.qrCode.text = rfSpacedCode(code)
+    m.qrHelp.text = tr("Scan with your phone's camera, then tap Sign in. Or open") + ` ${rfShortHost(server)}/reelforge/link ` + tr("and enter the code.")
+
+    m.qrPollTimer.control = "start"
+    m.qrRefreshTimer.control = "start"
+end sub
+
+' An older server without the ReelForge QR image: the digits still work in Quick Connect.
+sub onQrImageStatus()
+    status = m.qrImage.loadStatus
+    if status = "ready"
+        m.qrLoading.visible = false
+    else if status = "failed"
+        m.qrLoading.text = tr("Enter the code below in Quick Connect on your phone or computer.")
+        m.qrLoading.visible = true
+    end if
+end sub
+
+sub onQrPoll()
+    if m.qrSecret = "" then return
+    if isValid(m.qrCheckTask) and m.qrCheckTask.state = "run" then return
+    m.qrCheckTask = CreateObject("roSGNode", "QuickConnect")
+    m.qrCheckTask.secret = m.qrSecret
+    m.qrCheckTask.saveCredentials = m.top.findNode("saveCredentials").checkedState[0]
+    m.qrCheckTask.observeField("authenticated", "onQrChecked")
+    m.qrCheckTask.control = "RUN"
+end sub
+
+sub onQrChecked()
+    if not isValid(m.qrCheckTask) then return
+    if m.qrCheckTask.authenticated > 0
+        stopQrSignIn()
+        m.top.qrAuthenticated = true
+    end if
+end sub
+
+sub onNewQrCode()
+    requestQrCode()
+end sub
+
+sub stopQrSignIn()
+    if isValid(m.qrPollTimer) then m.qrPollTimer.control = "stop"
+    if isValid(m.qrRefreshTimer) then m.qrRefreshTimer.control = "stop"
+    m.qrSecret = ""
+end sub
+
+' Stop asking the server once this screen goes away (signed in with a password, or Back).
+sub OnScreenHidden()
+    stopQrSignIn()
+end sub
+
+' Show the code again when coming back to this screen.
+sub OnScreenShown()
+    group = m.global.sceneManager.callFunc("getActiveScene")
+    if isValid(m.top.lastFocus)
+        m.top.lastFocus.setFocus(true)
+        if isValid(group) then group.lastFocus = m.top.lastFocus
+    else
+        m.top.setFocus(true)
+        if isValid(group) then group.lastFocus = m.top
+    end if
+    if isValid(m.qrPollTimer) and m.qrSecret = "" then requestQrCode()
+end sub
+
+function rfServerUrl() as string
+    url = chainLookupReturn(m.global.session, "server.url", "")
+    if not isString(url) then return ""
+    while url.Right(1) = "/"
+        url = url.Left(url.Len() - 1)
+    end while
+    return url
+end function
+
+' "http://192.168.1.10:8096" -> "192.168.1.10:8096"
+function rfShortHost(url as string) as string
+    i = url.Instr("://")
+    if i >= 0 then return url.Mid(i + 3)
+    return url
+end function
+
+' "429251" -> "429 251"
+function rfSpacedCode(code as string) as string
+    if code.Len() = 6 then return `${code.Left(3)} ${code.Right(3)}`
+    return code
+end function

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge: sign in by scanning a QR code with a phone (left), or with a password (right). -->
 <component name="SigninScene" extends="JFScreen">
   <children>
     <Text
@@ -7,48 +8,67 @@
       font="font:LargeSystemFont"
       height="100"
       width="1920"
-      translation="[0, 100]" />
+      translation="[0, 70]" />
 
-    <Poster uri="pkg:/images/baseline_person_white_48dp.png" id="overlayCurrentUserProfileImage" width="256" height="256" loadDisplayMode="scaleToZoom" translation="[832, 190]" />
-
-    <Rectangle id="errorContainer" visible="false" width="600" height="60" translation="[660, 386]">
-      <Text id="errorMessage" text="" wrap="true" width="600" font="font:MediumSystemFont" horizAlign="center" translation="[10, 15]" />
+    <!-- Left: phone sign-in (Quick Connect). Filled in by SigninScene.bs once the server hands out a code. -->
+    <Rectangle id="qrPanel" color="#121922" width="780" height="820" translation="[120, 190]">
+      <Label id="qrTitle" text="Sign in with your phone" width="780" horizAlign="center" translation="[0, 34]" color="#E8EDF2" font="font:MediumBoldSystemFont" />
+      <Rectangle id="qrFrame" color="#FFFFFF" width="420" height="420" translation="[180, 100]">
+        <Poster id="qrImage" width="400" height="400" translation="[10, 10]" loadDisplayMode="scaleToFit" />
+        <Label id="qrLoading" text="Getting a code…" width="420" height="420" horizAlign="center" vertAlign="center" color="#17202A" font="font:SmallSystemFont" />
+      </Rectangle>
+      <Label id="qrCode" text="" width="780" horizAlign="center" translation="[0, 548]" color="#FF8A1F">
+        <Font role="font" uri="font:BoldSystemFontFile" size="72" />
+      </Label>
+      <Label id="qrHelp" text="" width="660" wrap="true" horizAlign="center" lineSpacing="6" translation="[60, 650]" color="#93A4B5" font="font:SmallSystemFont" />
     </Rectangle>
 
-    <Rectangle id="signInFormContainer" color="#121922" width="870" height="280" translation="[525, 466]">
-      <FormList id="configOptions" translation="[60, 40]" itemSpacing="[0, 50]" />
+    <!-- Right: password sign-in -->
+    <Label id="passwordTitle" text="Or use your password" width="840" horizAlign="center" translation="[980, 224]" color="#E8EDF2" font="font:MediumBoldSystemFont" />
+
+    <Poster uri="pkg:/images/baseline_person_white_48dp.png" id="overlayCurrentUserProfileImage" width="150" height="150" loadDisplayMode="scaleToZoom" translation="[1325, 290]" />
+
+    <Rectangle id="errorContainer" visible="false" width="780" height="60" translation="[1010, 452]">
+      <Text id="errorMessage" text="" wrap="true" width="760" font="font:MediumSystemFont" horizAlign="center" translation="[10, 15]" />
+    </Rectangle>
+
+    <Rectangle id="signInFormContainer" color="#121922" width="840" height="280" translation="[980, 520]">
+      <FormList id="configOptions" translation="[45, 40]" itemSpacing="[0, 50]" />
     </Rectangle>
 
     <CheckList
       id="saveCredentials"
       checkedState="[true]"
-      translation="[560, 771]"
+      translation="[1010, 822]"
       focusFootprintBitmapUri=""
       drawFocusFeedback="false">
       <ContentNode role="content">
-        <ContentNode title="Save Credentials?" />
+        <ContentNode title="Stay signed in" />
       </ContentNode>
     </CheckList>
 
     <StandardButton
       id="submit"
-      text="Submit"
+      text="Sign In"
       height="85"
-      width="350"
-      translation="[595,900]" />
+      width="400"
+      translation="[1000,900]" />
 
     <StandardButton
       id="quickConnect"
-      text="Quick Connect"
+      text="New QR code"
       height="85"
-      width="350"
-      translation="[975,900]" />
+      width="400"
+      translation="[1420,900]" />
 
     <Timer id="quickConnectTimer" duration="3" repeat="true" />
+    <Timer id="qrRefreshTimer" duration="540" repeat="true" />
   </children>
   <interface>
     <field id="user" type="string" onchange="onUserChange" value="" />
     <field id="profileImageUri" type="string" onchange="onProfileImageUriChange" value="" alwaysNotify="true" />
     <field id="alert" type="string" onchange="onAlertChange" value="" />
+    <!-- ReelForge: set once a phone approves this TV; ShowScenes then finishes signing in -->
+    <field id="qrAuthenticated" type="boolean" value="false" alwaysNotify="true" />
   </interface>
 </component>

@@ -869,3 +869,22 @@ public class RatingsTests
         Assert.Equal("Invalid API key!", bad);
     }
 }
+
+public class TvSignInTests
+{
+    [Fact]
+    public void The_qr_link_points_at_this_servers_approve_page()
+    {
+        Assert.Equal("http://192.168.1.10:8096/reelforge/link?code=429251", ReelForge.Api.TvSignInController.LinkFor("http", "192.168.1.10:8096", "", "429251"));
+        Assert.Equal("https://home.reelforge.stream/jf/reelforge/link?code=123456", ReelForge.Api.TvSignInController.LinkFor("https", "home.reelforge.stream", "/jf/", "123456"));
+    }
+
+    [Fact]
+    public void The_qr_image_is_a_png()
+    {
+        var qr = Net.Codecrete.QrCodeGenerator.QrCode.EncodeText("http://192.168.1.10:8096/reelforge/link?code=429251", Net.Codecrete.QrCodeGenerator.QrCode.Ecc.Medium);
+        byte[] png = qr.ToPngBitmap(3, 10, 0x111111, 0xFFFFFF);
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, png[..4]);
+        Assert.InRange(qr.Size, 21, 45); // a short link stays a small, easy-to-scan code
+    }
+}

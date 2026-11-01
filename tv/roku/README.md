@@ -8,6 +8,10 @@ ReelForge look and these additions:
   you're on it, with the title's artwork filling the screen. You can turn it off in Settings › User Interface › Home Rows.
 - **IMDb and Rotten Tomatoes scores** on movie and show pages, from the ReelForge server (IMDb scores need the OMDb key
   in the ReelForge web app under Settings › General).
+- **Sign in with a QR code.** The sign-in screen shows a QR code. Scan it with your phone's camera, tap
+  **Sign in**, and the TV signs in, with no typing on the remote. Admins can pick which profile the TV signs in as
+  (handy for a kids' TV). You can also open `<server>/reelforge/link` on any phone or computer and type the
+  6-digit code, or use **Sign in a TV** in the profile menu.
 - **"Are you still watching?"** after 2 episodes in a row play on their own with no button pressed.
   You can change the number, or set it to 0 to turn this off, in Settings › Playback.
 
@@ -30,7 +34,11 @@ It stays installed, also after restarts, until you replace it with another one.
    and your password. Click **Upload**, pick the .zip, then **Install with zip**.
    ReelForge opens on the TV, and from now on it's in your list of apps.
 4. **Sign in.** The app finds your ReelForge server on your network automatically. You can also type its address,
-   e.g. `192.168.1.10:8096` or `https://home.reelforge.stream`.
+   e.g. `192.168.1.10:8096` or `https://home.reelforge.stream`. Then scan the QR code with your phone and tap
+   **Sign in**, or use your password on the right.
+   - The QR link uses the address the TV connected with. If that's a home address (192.168…), your phone needs
+     to be on the home Wi-Fi.
+   - Codes renew by themselves every 9 minutes, or press **New QR code**.
 
 **Updating:** repeat step 3 with the newer .zip (it replaces the old one).
 

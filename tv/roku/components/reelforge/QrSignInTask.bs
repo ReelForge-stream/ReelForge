@@ -1,0 +1,16 @@
+import "pkg:/source/api/userauth.bs"
+import "pkg:/source/api/baserequest.bs"
+import "pkg:/source/utils/config.bs"
+
+sub init()
+    m.top.functionName = "startQuickConnect"
+end sub
+
+sub startQuickConnect()
+    json = initQuickConnect()
+    if json = invalid or json.Code = invalid or json.Secret = invalid
+        m.top.result = { error: true }
+        return
+    end if
+    m.top.result = { Code: json.Code, Secret: json.Secret }
+end sub

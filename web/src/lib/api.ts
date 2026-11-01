@@ -262,6 +262,16 @@ export class Api {
     return this.get<User[]>('/Users');
   }
 
+  /**
+   * Approves a TV showing a Quick Connect code, signing it in as you (or, for admins, as another profile).
+   * The server answers 404 when the code has expired or was already used.
+   */
+  approveTv(code: string, userId?: string) {
+    const q = new URLSearchParams({ code: code.trim() });
+    if (userId && userId !== this.userId) q.set('userId', userId);
+    return this.post<boolean>(`/QuickConnect/Authorize?${q}`);
+  }
+
   seasons(seriesId: string) {
     return this.get<{ Items: Item[] }>(`/Shows/${seriesId}/Seasons?userId=${this.userId}`).then((r) => r.Items);
   }

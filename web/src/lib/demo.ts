@@ -420,6 +420,10 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     { Name: 'TV Shows', ItemId: 'lib-shows', CollectionType: 'tvshows', Locations: ['\\\\10.0.0.201\\plexdata\\TV'] },
   ];
   if (p === '/Users' && method === 'GET') return users;
+  if (p.startsWith('/QuickConnect/Authorize')) {
+    if (new URLSearchParams(p.split('?')[1]).get('code') === '000000') throw Object.assign(new Error('Not found'), { status: 404 });
+    return true;
+  }
   if (p === '/Users/New') { const u = { Id: `u${users.length + 1}`, Name: (body as { Name: string }).Name, HasPassword: !!(body as { Password: string }).Password, Policy: { ...users[1].Policy, IsAdministrator: false } }; users.push(u); return u; }
   if (p.startsWith('/Users/') && p.endsWith('/Policy')) { const u = users.find((x) => x.Id === p.split('/')[2]); if (u) u.Policy = body as typeof u.Policy; return undefined; }
   if (p.startsWith('/Users/') && method === 'DELETE') { users = users.filter((x) => x.Id !== p.split('/')[2]); return undefined; }
