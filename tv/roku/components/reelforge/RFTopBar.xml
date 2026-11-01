@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ReelForge top bar: logo, sections, clock and profile, like the web app's header. -->
+<component name="RFTopBar" extends="Group">
+  <children>
+    <Poster id="shade" uri="pkg:/images/rf/rf-fade-top.png" width="1920" height="200" loadDisplayMode="scaleToFill" />
+    <Poster id="logo" uri="pkg:/images/logo.png" width="165" height="57" translation="[96, 36]" loadDisplayMode="scaleToFit" />
+    <Group id="tabs" translation="[318, 38]" />
+    <Label id="clock" horizAlign="right" width="200" height="52" vertAlign="center" translation="[1440, 38]" />
+    <Poster id="avatarBg" uri="pkg:/images/rf/rf-round.9.png" width="52" height="52" translation="[1660, 38]" />
+    <Label id="avatarInitial" width="52" height="52" horizAlign="center" vertAlign="center" translation="[1660, 38]" />
+    <Label id="userName" height="52" vertAlign="center" width="140" translation="[1724, 38]" />
+    <Timer id="clockTimer" duration="20" repeat="true" />
+  </children>
+  <interface>
+    <!-- section this screen belongs to: home, movies, tv, mylist, search, settings -->
+    <field id="active" type="string" value="home" onChange="restyle" />
+    <field id="userName" type="string" onChange="onUser" />
+    <!-- a section was chosen (OK on a tab) -->
+    <field id="selected" type="string" alwaysNotify="true" />
+    <!-- Down was pressed: the screen moves focus back into its content -->
+    <field id="leaveDown" type="boolean" alwaysNotify="true" />
+    <function name="enter" />
+  </interface>
+</component>

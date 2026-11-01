@@ -1,0 +1,41 @@
+import "pkg:/source/utils/rfTheme.bs"
+
+sub init()
+    m.bg = m.top.findNode("bg")
+    m.icon = m.top.findNode("icon")
+    m.label = m.top.findNode("label")
+    m.label.font = rfFont("textSemi", 32)
+    restyle()
+end sub
+
+sub layout()
+    h = m.top.height
+    hasIcon = m.top.iconUri <> ""
+    m.icon.visible = hasIcon
+    m.icon.uri = m.top.iconUri
+    m.icon.translation = [28, int((h - 30) / 2)]
+    left = 34
+    if hasIcon then left = 74
+    m.label.text = m.top.text
+    m.label.height = h
+    m.label.translation = [left, 0]
+    w = m.top.width
+    if w <= 0 then w = left + int(Len(m.top.text) * 17) + 40 ' rough width for the text when none is set
+    m.bg.width = w
+    m.bg.height = h
+    m.label.width = w - left - 20
+end sub
+
+sub restyle()
+    if m.top.highlighted
+        m.bg.blendColor = "#FFFFFF"
+        m.bg.opacity = 1
+        m.label.color = rfColor.EMBER_INK
+        m.icon.blendColor = rfColor.EMBER_INK
+    else
+        m.bg.blendColor = "#6D7783"
+        m.bg.opacity = 0.55
+        m.label.color = "#FFFFFF"
+        m.icon.blendColor = "#FFFFFF"
+    end if
+end sub

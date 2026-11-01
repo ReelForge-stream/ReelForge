@@ -1,0 +1,59 @@
+' ReelForge look for the Roku app: the web app's colors and fonts (Chakra Petch for headings,
+' Instrument Sans for text), shared by every restyled screen.
+
+namespace rfColor
+    const BASE = "#17202A" ' page background
+    const DEEP = "#121922" ' menus, overlays
+    const SURFACE = "#212C38" ' cards, panels
+    const SURFACE2 = "#2B3846" ' raised controls
+    const TEXT = "#E8EDF2"
+    const MUTED = "#93A4B5"
+    const EMBER = "#FF8A1F" ' the one accent: focus, actions
+    const EMBER_INK = "#17202A" ' text on ember
+    const COOLANT = "#5FD3A6"
+    const IMDB = "#F5C518"
+end namespace
+
+' A Font node for one of the bundled typefaces.
+' kind: "display" (Chakra Petch SemiBold), "displayBold", "text" (Instrument Sans), "textMedium", "textSemi"
+function rfFont(kind as string, size as integer) as object
+    files = {
+        display: "ChakraPetch-SemiBold.ttf",
+        displayBold: "ChakraPetch-Bold.ttf",
+        text: "InstrumentSans-Regular.ttf",
+        textMedium: "InstrumentSans-Medium.ttf",
+        textSemi: "InstrumentSans-SemiBold.ttf"
+    }
+    file = files.LookupCI(kind)
+    if file = invalid then file = files.text
+    font = CreateObject("roSGNode", "Font")
+    font.uri = "pkg:/fonts/" + file
+    font.size = size
+    return font
+end function
+
+' "2h 17m" / "48m" from ticks (100 ns), or "" when unknown.
+function rfRuntime(ticks as dynamic) as string
+    if ticks = invalid then return ""
+    minutes = int(ticks / 600000000#)
+    if minutes <= 0 then return ""
+    if minutes < 60 then return `${minutes}m`
+    return `${int(minutes / 60)}h ${minutes mod 60}m`
+end function
+
+' Joins the non-empty parts with a middle dot: "2021 · PG-13 · 2h 17m".
+function rfJoin(parts as object) as string
+    out = ""
+    for each p in parts
+        if p <> invalid
+            s = p
+            if type(p) <> "roString" and type(p) <> "String" then s = p.ToStr()
+            s = s.Trim()
+            if s <> ""
+                if out <> "" then out = out + "  ·  "
+                out = out + s
+            end if
+        end if
+    end for
+    return out
+end function

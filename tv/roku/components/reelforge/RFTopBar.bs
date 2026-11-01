@@ -1,0 +1,140 @@
+import "pkg:/source/utils/rfTheme.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.ids = ["home", "movies", "tv", "mylist", "search", "settings"]
+    names = [tr("Home"), tr("Movies"), tr("TV Shows"), tr("My List"), tr("Search"), ""]
+    m.index = 0
+    m.tabs = []
+    x = 0
+    tabsGroup = m.top.findNode("tabs")
+    for i = 0 to m.ids.count() - 1
+        tabNode = tabsGroup.createChild("Group")
+        tabNode.translation = [x, 0]
+        bg = tabNode.createChild("Poster")
+        bg.uri = "pkg:/images/rf/rf-pill.9.png"
+        bg.height = 52
+        bg.blendColor = "#FFFFFF"
+        bg.visible = false
+        under = tabNode.createChild("Rectangle")
+        under.height = 4
+        under.color = rfColor.EMBER
+        under.translation = [20, 54]
+        under.visible = false
+        if m.ids[i] = "settings"
+            icon = tabNode.createChild("Poster")
+            icon.uri = "pkg:/images/rf/rf-gear.png"
+            icon.width = 30
+            icon.height = 30
+            icon.translation = [18, 11]
+            w = 66
+            label = invalid
+        else
+            label = tabNode.createChild("Label")
+            label.font = rfFont("textMedium", 30)
+            label.text = names[i]
+            label.height = 52
+            label.vertAlign = "center"
+            label.translation = [22, 0]
+            textWidth = label.boundingRect().width
+            if textWidth <= 0 then textWidth = Len(names[i]) * 15
+            w = int(textWidth) + 44
+            icon = invalid
+        end if
+        bg.width = w
+        under.width = w - 40
+        m.tabs.push({ group: tabNode, bg: bg, label: label, icon: icon, under: under })
+        x = x + w + 6
+    end for
+
+    m.clock = m.top.findNode("clock")
+    m.clock.font = rfFont("textMedium", 28)
+    m.clock.color = rfColor.MUTED
+    avatarBg = m.top.findNode("avatarBg")
+    avatarBg.blendColor = rfColor.SURFACE2
+    m.avatarInitial = m.top.findNode("avatarInitial")
+    m.avatarInitial.font = rfFont("display", 28)
+    m.avatarInitial.color = rfColor.TEXT
+    m.userLabel = m.top.findNode("userName")
+    m.userLabel.font = rfFont("textMedium", 26)
+    m.userLabel.color = rfColor.TEXT
+
+    m.clockTimer = m.top.findNode("clockTimer")
+    m.clockTimer.observeField("fire", "updateClock")
+    m.clockTimer.control = "start"
+    updateClock()
+    m.top.observeField("focusedChild", "restyle")
+    restyle()
+end sub
+
+sub onUser()
+    name = m.top.userName
+    if name = invalid then name = ""
+    m.userLabel.text = name
+    m.avatarInitial.text = UCase(Left(name, 1))
+end sub
+
+sub updateClock()
+    hideClock = chainLookupReturn(m.global.session, "user.settings.`ui.design.hideclock`", false)
+    if hideClock = true
+        m.clock.text = ""
+        return
+    end if
+    now = CreateObject("roDateTime")
+    now.ToLocalTime()
+    h = now.GetHours()
+    mins = now.GetMinutes()
+    suffix = "AM"
+    if h >= 12 then suffix = "PM"
+    h = h mod 12
+    if h = 0 then h = 12
+    mm = mins.ToStr()
+    if mins < 10 then mm = "0" + mm
+    m.clock.text = `${h}:${mm} ${suffix}`
+end sub
+
+' Focus the bar, starting on the active section.
+sub enter()
+    for i = 0 to m.ids.count() - 1
+        if m.ids[i] = m.top.active then m.index = i
+    end for
+    m.top.setFocus(true)
+    restyle()
+end sub
+
+sub restyle()
+    if not isValid(m.tabs) then return
+    focused = m.top.hasFocus()
+    for i = 0 to m.tabs.count() - 1
+        t = m.tabs[i]
+        isFocused = focused and i = m.index
+        isActive = m.ids[i] = m.top.active
+        t.bg.visible = isFocused
+        t.under.visible = isActive and not isFocused
+        color = rfColor.MUTED
+        if isActive then color = rfColor.TEXT
+        if isFocused then color = rfColor.EMBER_INK
+        if isValid(t.label) then t.label.color = color
+        if isValid(t.icon) then t.icon.blendColor = color
+    end for
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "left"
+        if m.index > 0 then m.index = m.index - 1
+        restyle()
+        return true
+    else if key = "right"
+        if m.index < m.ids.count() - 1 then m.index = m.index + 1
+        restyle()
+        return true
+    else if key = "OK"
+        m.top.selected = m.ids[m.index]
+        return true
+    else if key = "down"
+        m.top.leaveDown = true
+        return true
+    end if
+    return false
+end function

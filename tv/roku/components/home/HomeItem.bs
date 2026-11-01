@@ -8,12 +8,15 @@ import "pkg:/source/enums/SeriesStatus.bs"
 import "pkg:/source/enums/String.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/rfTheme.bs"
 
-const ITEM_IMAGE_HEIGHT = 261
-const ITEM_ICON_TOP = 85
+const ITEM_IMAGE_HEIGHT = 236
+const ITEM_ICON_TOP = 60
 
 sub init()
     findNodes()
+    ' ReelForge: the title drops down when there's no second line under it
+    m.itemTextExtra.observeField("text", "placeTitle")
     m.itemPoster.observeField("loadStatus", "onPosterLoadStatusChanged")
     setColors()
 end sub
@@ -49,6 +52,10 @@ end sub
 
 sub initItemText()
     m.itemText = m.top.findNode("itemText")
+    if isValid(m.itemText) and not isValid(m.rfTextFont)
+        m.rfTextFont = rfFont("display", 30)
+        m.itemText.font = m.rfTextFont
+    end if
     if isValid(m.itemText)
         m.itemText.color = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemTitle", ColorPalette.WHITE)
     end if
@@ -60,6 +67,10 @@ end sub
 
 sub initItemTextExtra()
     m.itemTextExtra = m.top.findNode("itemTextExtra")
+    if isValid(m.itemTextExtra) and not isValid(m.rfExtraFont)
+        m.rfExtraFont = rfFont("textMedium", 22)
+        m.itemTextExtra.font = m.rfExtraFont
+    end if
     if isValid(m.itemTextExtra)
         m.itemTextExtra.color = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemSubtitle", ColorPalette.MIDGREY)
     end if
@@ -117,16 +128,23 @@ sub itemContentChanged()
     m.itemProgressBackground.visible = false
     m.itemProgress.width = 0
 
-    m.itemTextExtra.maxWidth = itemData.imageWidth
+    ' ReelForge: title (and a second line) on the picture, over the dark fade
+    m.itemTextExtra.maxWidth = itemData.imageWidth - 36
     m.itemTextExtra.visible = true
     m.itemTextExtra.text = ""
-    m.itemTextExtra.font.size = 22
+    m.itemTextExtra.translation = [18, ITEM_IMAGE_HEIGHT - 40]
 
-    m.itemText.maxWidth = itemData.imageWidth
-    m.itemText.height = 34
-    m.itemText.font.size = 25
+    m.itemText.maxWidth = itemData.imageWidth - 36
+    m.itemText.height = 36
     m.itemText.horizAlign = "left"
     m.itemText.vertAlign = "bottom"
+    placeTitle()
+
+    shade = m.top.findNode("shade")
+    if isValid(shade)
+        shade.width = itemData.imageWidth
+        shade.translation = [0, ITEM_IMAGE_HEIGHT - 140]
+    end if
 
     m.backdrop.width = itemData.imageWidth
     m.backdrop.height = ITEM_IMAGE_HEIGHT
@@ -149,7 +167,7 @@ sub itemContentChanged()
         return
     end if
 
-    playedIndicatorLeftPosition = m.itemPoster.width - 60
+    playedIndicatorLeftPosition = m.itemPoster.width - 80
     m.playedIndicator.translation = [playedIndicatorLeftPosition, 0]
 
     ' "Program" is from clicking on an "On Now" item on the Home Screen
@@ -494,6 +512,15 @@ end sub
 
 '
 ' Draws and animates item progress bar
+sub placeTitle()
+    if not isValid(m.itemText) or not isValid(m.itemTextExtra) then return
+    if m.itemTextExtra.text = "" or m.itemTextExtra.text = invalid
+        m.itemText.translation = [18, ITEM_IMAGE_HEIGHT - 58]
+    else
+        m.itemText.translation = [18, ITEM_IMAGE_HEIGHT - 82]
+    end if
+end sub
+
 sub drawProgressBar(itemData)
     if not isValid(itemData.LookupCI("imageWidth")) then return
 

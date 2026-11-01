@@ -3,6 +3,9 @@
   <interface>
     <field id="selectedItem" type="node" alwaysNotify="true" />
     <field id="quickPlayNode" type="node" />
+    <!-- ReelForge: titles for the billboard (HomeData nodes), and the libraries for the top bar -->
+    <field id="featured" type="array" />
+    <field id="libraries" type="array" />
     <function name="updateHomeRows" />
     <function name="isFocusOnFavoriteRow" />
     <function name="reloadFavorites" />
