@@ -516,6 +516,7 @@ async function handle(method: string, path: string, body: unknown): Promise<unkn
     };
   }
   if (p.startsWith('/ReelForge/Agents')) return undefined;
+  if (p === '/ReelForge/Tv/App') return { Version: '1.0.4', RokuDownloadUrl: 'https://github.com/ReelForge-stream/ReelForge/releases/download/v1.0.4/ReelForge-Roku-1.0.4.zip', ReleaseUrl: 'https://github.com/ReelForge-stream/ReelForge/releases/tag/v1.0.4' };
   if (p === '/ReelForge/Tvs' && method === 'GET') {
     return {
       ServerVersion: '0.9.0',
