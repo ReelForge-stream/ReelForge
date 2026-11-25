@@ -273,6 +273,11 @@ export class Api {
     return this.post<boolean>(`/QuickConnect/Authorize?${q}`);
   }
 
+  /** The TV app download that matches this server's version ("Get the TV app"). */
+  tvApp() {
+    return this.get<{ Version: string; RokuDownloadUrl: string; ReleaseUrl: string }>('/ReelForge/Tv/App');
+  }
+
   seasons(seriesId: string) {
     return this.get<{ Items: Item[] }>(`/Shows/${seriesId}/Seasons?userId=${this.userId}`).then((r) => r.Items);
   }

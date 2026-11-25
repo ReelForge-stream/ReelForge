@@ -25,6 +25,9 @@ public sealed record TvDto(
     bool StatusIsError,
     DateTime StatusUtc);
 
+/// <summary>Where to get the TV app for this server's version ("Get the TV app" page).</summary>
+public sealed record TvAppDto(string Version, string RokuDownloadUrl, string ReleaseUrl);
+
 public sealed record TvListDto(string ServerVersion, IReadOnlyList<TvDto> Tvs);
 
 /// <summary>The TV app checks in here when it opens, so the server can keep it up to date.</summary>
@@ -36,6 +39,18 @@ public sealed class TvCheckInController : ControllerBase
     private readonly TvUpdater _tvs;
 
     public TvCheckInController(TvUpdater tvs) => _tvs = tvs;
+
+    /// <summary>The Roku app that matches this server, so people install the right version.</summary>
+    [HttpGet("App")]
+    public ActionResult<TvAppDto> App()
+    {
+        string v = _tvs.TargetVersion;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return new TvAppDto(
+            v,
+            string.Format(inv, TvUpdater.ReleaseAssetUrl, v),
+            string.Format(inv, "https://github.com/ReelForge-stream/ReelForge/releases/tag/v{0}", v));
+    }
 
     [HttpPost("CheckIn")]
     public ActionResult<TvCheckInResult> CheckIn([FromBody] TvCheckInRequest req)

@@ -23,6 +23,7 @@ import Holding from './manager/Holding';
 import Saved from './manager/Saved';
 import Agents from './manager/Agents';
 import Tvs from './manager/Tvs';
+import TvApp from './pages/TvApp';
 import ManagerSettings from './manager/Settings';
 import SettingsLayout from './settings/SettingsLayout';
 import SettingsGeneral from './settings/General';
@@ -116,6 +117,7 @@ function AppRoutes({ onSignOut }: { onSignOut: (switchTo?: string) => void }) {
           <Route path="downloads" element={<Downloads />} />
           <Route path="person/:id" element={<Person />} />
           <Route path="link" element={<LinkTv />} />
+          <Route path="tv-app" element={<TvApp />} />
           {api.isAdmin && (
             <Route path="manager" element={<ManagerLayout />}>
               <Route index element={<ManagerOverview />} />
@@ -275,6 +277,10 @@ function ProfileMenu({ onSignOut }: { onSignOut: (switchTo?: string) => void }) 
             <button role="menuitem" className="pm-row" onClick={() => go('/link')}>
               <span className="pm-icon"><Icon.tv /></span>
               <span>Sign in a TV</span>
+            </button>
+            <button role="menuitem" className="pm-row" onClick={() => go('/tv-app')}>
+              <span className="pm-icon"><Icon.download /></span>
+              <span>Get the TV app</span>
             </button>
             {canDownload && (
               <button role="menuitem" className="pm-row" onClick={() => go('/downloads')}>
